@@ -10,6 +10,8 @@ QUARANTINE_DIR = os.path.join(BASE_DIR, "quarantine")  # safe quarantine area
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "sentinel.db")
 LOG_PATH = os.path.join(DATA_DIR, "sentinel.log")
+IOC_FILE = os.path.join(BASE_DIR, "iocs.json")          # blocklist (IoCs)
+TRUSTED_FILE = os.path.join(DATA_DIR, "trusted.json")   # user whitelist
 
 # How often the dashboard runs a scan (milliseconds)
 SCAN_INTERVAL_MS = 3000
@@ -27,7 +29,34 @@ SCORES = {
     "unusual_path": 25,
     "file_burst": 30,
     "suspicious_network": 20,
+    "suspicious_parent": 65,   # strong sign on its own -> HIGH
+    "ioc_match": 110,           # known-bad hash/name/IP -> always CRITICAL
     "multiple_indicators": 15,  # bonus when 3 or more indicators combine
+}
+
+# MITRE ATT&CK technique for each indicator / alert type
+MITRE = {
+    "unknown_process": "T1036 Masquerading",
+    "high_cpu": "T1496 Resource Hijacking",
+    "unusual_path": "T1204.002 User Execution: Malicious File",
+    "file_burst": "T1486 Data Encrypted for Impact",
+    "suspicious_network": "T1571 Non-Standard Port",
+    "suspicious_parent": "T1059 Command and Scripting Interpreter",
+    "ioc_match": "Known Indicator of Compromise",
+    "RANSOMWARE_BEHAVIOR": "T1486 Data Encrypted for Impact",
+    "FILE_INTEGRITY": "T1565.001 Stored Data Manipulation",
+}
+
+# Office/document apps should never start a shell. If they do, it is a
+# classic sign of a malicious macro or exploited document.
+SUSPICIOUS_PARENTS = {
+    "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "msaccess.exe",
+    "acrord32.exe", "acrobat.exe", "wordpad.exe", "mspub.exe",
+}
+SUSPICIOUS_CHILDREN = {
+    "cmd.exe", "powershell.exe", "pwsh.exe", "wscript.exe", "cscript.exe",
+    "mshta.exe", "rundll32.exe", "regsvr32.exe", "certutil.exe", "bitsadmin.exe",
+    "sh", "bash",
 }
 
 # Score -> level. Alerts are raised from ALERT_LEVEL upwards.
@@ -50,3 +79,11 @@ UNUSUAL_PATH_MARKERS = [
 
 # Remote ports commonly linked to backdoors / test shells
 SUSPICIOUS_PORTS = {4444, 5555, 1337, 31337, 6667, 12345, 9001}
+
+# ---- Multi-endpoint (agent -> central server) ----
+SERVER_PORT = 9900
+# Shared secret: the agent and the server must use the same value.
+# Change it before the demo.
+AGENT_TOKEN = "change-this-secret-123"
+AGENT_INTERVAL_SEC = 5
+ENDPOINT_OFFLINE_SEC = 30   # no report for this long = endpoint offline

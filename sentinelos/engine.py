@@ -6,9 +6,10 @@ import os
 import time
 
 from . import config
-from .database import Database
+from .database import Database, HOSTNAME
 from .detection import analyze
 from .file_monitor import FileMonitor
+from .lists import IocList, TrustedList
 from .network_monitor import get_connections
 from .process_monitor import ProcessMonitor
 from .system_info import get_system_info
@@ -21,7 +22,9 @@ class SentinelEngine:
         self.db = Database()
         self.process_monitor = ProcessMonitor()
         self.file_monitor = FileMonitor()
-        self.last_alert = {}   # (type, pid) -> time, to avoid alert spam
+        self.iocs = IocList()
+        self.trusted = TrustedList()
+        self.last_alert = {}   # (type, pid, level) -> time, to avoid alert spam
         self.state = {}        # latest scan results, read by the dashboard
 
     def start(self):
@@ -37,7 +40,7 @@ class SentinelEngine:
         processes = self.process_monitor.scan()
         connections = get_connections()
         burst = self.file_monitor.is_burst()
-        scored = analyze(processes, connections, burst)
+        scored = analyze(processes, connections, burst, self.iocs, self.trusted)
 
         new_alerts = []
         for proc in scored:
@@ -45,14 +48,18 @@ class SentinelEngine:
                 alert = self._raise("PROCESS_ALERT", proc["name"], proc["pid"],
                                     proc["score"], proc["level"], proc["reasons"],
                                     {"path": proc["path"], "cmdline": proc["cmdline"],
-                                     "cpu": proc["cpu_percent"], "memory_mb": proc["memory_mb"]})
+                                     "parent": f"{proc['parent_name']} ({proc['ppid']})",
+                                     "cpu": proc["cpu_percent"], "memory_mb": proc["memory_mb"],
+                                     "notes": proc["notes"]},
+                                    proc["mitre"])
                 if alert:
                     new_alerts.append(alert)
 
         if burst:
             alert = self._raise("RANSOMWARE_BEHAVIOR", "file system", 0, 30, "HIGH",
                                 [f"{self.file_monitor.recent_count()} file changes in "
-                                 f"{config.FILE_BURST_WINDOW_SEC}s"])
+                                 f"{config.FILE_BURST_WINDOW_SEC}s"],
+                                mitre=[config.MITRE["RANSOMWARE_BEHAVIOR"]])
             if alert:
                 new_alerts.append(alert)
 
@@ -62,12 +69,20 @@ class SentinelEngine:
             names = [f"{os.path.basename(p)} {s.lower()}" for p, s in changes]
             alert = self._raise("FILE_INTEGRITY", f"{len(changes)} protected file(s)", 0, 40,
                                 "HIGH", names[:5] + (["..."] if len(names) > 5 else []),
-                                {"files": [p for p, _ in changes]})
+                                {"files": [p for p, _ in changes]},
+                                [config.MITRE["FILE_INTEGRITY"]])
             if alert:
                 new_alerts.append(alert)
 
         for ev in self.file_monitor.take_new_events():
             self.db.add_event("FILE_" + ev["type"], details=ev["path"])
+
+        # Process timeline (start / stop events)
+        for p in self.process_monitor.started:
+            self.db.add_event("PROCESS_START", p["name"], p["pid"],
+                              details=f"parent={p['parent_name']} ({p['ppid']}) {p['path']}")
+        for p in self.process_monitor.stopped:
+            self.db.add_event("PROCESS_STOP", p["name"], p["pid"])
 
         for c in connections:
             if c["suspicious"]:
@@ -80,6 +95,7 @@ class SentinelEngine:
         threat = next((lvl for lvl in reversed(LEVEL_ORDER) if counts[lvl]), "LOW")
 
         self.state = {
+            "hostname": HOSTNAME,
             "system": get_system_info(),
             "processes": scored,
             "connections": connections,
@@ -91,12 +107,15 @@ class SentinelEngine:
         }
         return self.state
 
-    def _raise(self, alert_type, process, pid, score, level, reasons, details=None):
+    def _raise(self, alert_type, process, pid, score, level, reasons, details=None, mitre=()):
         """Create an alert unless the same one was raised recently."""
         key = (alert_type, pid if pid else process, level)  # re-alert if level rises
         if time.time() - self.last_alert.get(key, 0) < config.ALERT_COOLDOWN_SEC:
             return None
         self.last_alert[key] = time.time()
-        alert_id = self.db.add_alert(alert_type, process, pid, score, level, reasons, details)
+        alert_id = self.db.add_alert(alert_type, process, pid, score, level, reasons,
+                                     details, mitre)
         return {"id": alert_id, "type": alert_type, "process": process, "pid": pid,
-                "score": score, "level": level, "reasons": reasons}
+                "score": score, "level": level, "reasons": reasons, "mitre": list(mitre),
+                "details": details or {}, "endpoint": HOSTNAME,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")}

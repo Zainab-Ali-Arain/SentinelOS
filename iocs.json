@@ -1,0 +1,6 @@
+{
+  "_comment": "Indicators of Compromise. Add known-bad SHA-256 hashes, process names and IP addresses. The 127.0.0.66 entry is only for the safe demo (demo/ioc_test.py).",
+  "hashes": [],
+  "names": ["mimikatz.exe", "nc.exe", "ncat.exe", "psexec.exe"],
+  "ips": ["127.0.0.66"]
+}

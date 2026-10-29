@@ -1,8 +1,10 @@
 """SentinelOS - Mini Endpoint Detection & Response System.
 
 Usage:
-    python main.py          # open the dashboard (GUI)
-    python main.py --cli    # console mode (no GUI)
+    python main.py                    # open the dashboard (GUI)
+    python main.py --server           # dashboard + receive reports from agents
+    python main.py --agent SERVER_IP  # monitor this laptop, report to the server
+    python main.py --cli              # console mode (no GUI)
 """
 import sys
 import time
@@ -38,6 +40,12 @@ def run_cli():
 if __name__ == "__main__":
     if "--cli" in sys.argv:
         run_cli()
+    elif "--agent" in sys.argv:
+        i = sys.argv.index("--agent")
+        if i + 1 >= len(sys.argv):
+            sys.exit("Usage: python main.py --agent SERVER_IP")
+        from sentinelos.remote import run_agent
+        run_agent(sys.argv[i + 1])
     else:
         from sentinelos.dashboard import run
-        run()
+        run(server="--server" in sys.argv)

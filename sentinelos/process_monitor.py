@@ -12,6 +12,8 @@ class ProcessMonitor:
 
     def __init__(self):
         self.prev_writes = {}  # pid -> write_count at last scan
+        self.prev_names = None  # pid -> name at last scan (None = first scan)
+        self.started, self.stopped = [], []  # process timeline since last scan
         self.own_pid = os.getpid()
 
     def scan(self, sample_seconds=1.0):
@@ -55,6 +57,20 @@ class ProcessMonitor:
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue  # process ended or is protected - skip it
         self.prev_writes = writes
+
+        # Parent name: lets us spot e.g. Word starting PowerShell
+        names = {p["pid"]: p["name"] for p in results}
+        for info in results:
+            info["parent_name"] = names.get(info["ppid"], "")
+
+        # Timeline: compare this scan's PIDs with the previous scan
+        if self.prev_names is None:
+            self.started, self.stopped = [], []
+        else:
+            self.started = [p for p in results if p["pid"] not in self.prev_names]
+            self.stopped = [{"pid": pid, "name": name} for pid, name in self.prev_names.items()
+                            if pid not in names]
+        self.prev_names = names
         return results
 
 
