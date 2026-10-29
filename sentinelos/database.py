@@ -16,7 +16,8 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("sentinelos")
 
-HOSTNAME = socket.gethostname()
+# Name shown on the dashboard; set SENTINEL_NAME (or --name) to choose your own
+HOSTNAME = os.environ.get("SENTINEL_NAME") or socket.gethostname()
 
 
 def now():

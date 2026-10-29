@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Alerts</h1><div class="sub">Everything SentinelOS flagged, on every laptop. Click an alert for details.</div></div>
+  <a class="btn ghost" href="/export/alerts.csv">⬇ Export CSV</a>
+</div>
+<div class="grid kpis" id="sev"></div>
+<div class="card">
+  <div class="toolbar">
+    <input id="search" placeholder="Search..." style="flex:1;min-width:200px">
+    <select id="f-sev"><option value="">All severities</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select>
+    <select id="f-ep"><option value="">All laptops</option></select>
+    <select id="f-status"><option value="">Any status</option><option>NEW</option><option>REVIEWED</option><option>INVESTIGATED</option><option>RESOLVED</option><option>FALSE_POSITIVE</option></select>
+  </div>
+  <div class="table-wrap"><table id="atable"><thead><tr>
+    <th data-key="id">#</th><th data-key="timestamp">Time</th><th data-key="endpoint">Laptop</th><th data-key="alert_type">Type</th>
+    <th data-key="process">Process</th><th data-key="score">Score</th><th>Severity</th><th>Reasons</th><th>MITRE</th><th>Status</th>
+  </tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let alerts = [];
+// "T1486 Data Encrypted for Impact, T1496 ..." -> "T1486, T1496" (full names on hover)
+const mitreIds = m => (m || "").split(", ").map(x => x.startsWith("T") ? x.split(" ")[0] : "IoC").filter(Boolean).join(", ") || "-";
+const state = { key: "id", dir: -1 };
+const sortRows = sortable(document.getElementById("atable"), state, render);
+["search", "f-sev", "f-ep", "f-status"].forEach(id => document.getElementById(id).addEventListener("input", render));
+
+function render() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const sev = document.getElementById("f-sev").value, ep = document.getElementById("f-ep").value,
+        st = document.getElementById("f-status").value;
+  const rows = sortRows(alerts.filter(a => (!sev || a.severity === sev) && (!ep || a.endpoint === ep) &&
+    (!st || a.status === st) && (!q || JSON.stringify(a).toLowerCase().includes(q))));
+  document.getElementById("rows").innerHTML = rows.map(a => `
+    <tr class="row-${esc(a.severity)} click" onclick="view(${a.id})"><td class="muted">${a.id}</td><td class="small nowrap" title="${esc(a.timestamp)}">${esc(a.timestamp.slice(5))}</td><td>${esc(a.endpoint)}</td>
+    <td>${esc(a.alert_type)}</td><td><b>${esc(a.process)}</b> <span class="muted small">${a.pid ? "PID " + a.pid : ""}</span></td>
+    <td><b>${a.score}</b></td><td>${badge(a.severity)}</td><td class="reasons trunc" title="${esc(a.reasons)}">${esc(a.reasons)}</td>
+    <td class="small nowrap" title="${esc(a.mitre)}">${esc(mitreIds(a.mitre))}</td>
+    <td><span class="badge ${a.status === "NEW" ? "b-NEW" : "b-OK"}">${esc(a.status)}</span></td></tr>`).join("")
+    || '<tr><td colspan="10" class="empty">No alerts match</td></tr>';
+}
+
+function view(id) {
+  const a = alerts.find(x => x.id === id);
+  let details = {};
+  try { details = JSON.parse(a.details || "{}"); } catch (e) {}
+  showModal(`Alert #${a.id} · ${a.alert_type}`, { Time: a.timestamp, Laptop: a.endpoint, Process: a.process,
+    PID: a.pid, Score: a.score, Severity: a.severity, Reasons: a.reasons, "MITRE ATT&CK": a.mitre || "-",
+    Status: a.status, Response: a.response || "-", ...details });
+  if (ROLE === "admin") {
+    const bar = document.createElement("div");
+    bar.className = "toolbar";
+    bar.style.marginTop = "18px";
+    bar.innerHTML = '<span class="muted small">Mark as:</span>' + ["REVIEWED", "RESOLVED", "FALSE_POSITIVE"].map(st =>
+      `<button class="btn ${st === "FALSE_POSITIVE" ? "ghost" : ""} sm" onclick="setStatus(${a.id}, '${st}')">${st.replace("_", " ")}</button>`).join("");
+    document.querySelector("#modal .box").appendChild(bar);
+  }
+}
+
+async function setStatus(id, status) {
+  if (!status) return;
+  await api(`/api/alerts/${id}/status`, { method: "POST", body: JSON.stringify({ status }) });
+  closeModal();
+  load();
+}
+
+async function load() {
+  const d = await api("/api/alerts");
+  if (!d) return;
+  alerts = d.alerts;
+  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, NEW: 0 };
+  alerts.forEach(a => { counts[a.severity] = (counts[a.severity] || 0) + 1; if (a.status === "NEW") counts.NEW++; });
+  const colors = { CRITICAL: "var(--critical)", HIGH: "var(--high)", MEDIUM: "var(--medium)", NEW: "var(--accent)" };
+  document.getElementById("sev").innerHTML = Object.entries(counts).map(([k, v]) =>
+    `<div class="card kpi" style="--kpi-color:${colors[k]}"><div class="label">${k === "NEW" ? "Not reviewed" : k}</div><div class="value">${v}</div></div>`).join("");
+  const sel = document.getElementById("f-ep"), current = sel.value;
+  const eps = [...new Set(alerts.map(a => a.endpoint))];
+  sel.innerHTML = '<option value="">All laptops</option>' + eps.map(e => `<option ${e === current ? "selected" : ""}>${esc(e)}</option>`).join("");
+  render();
+}
+poll(load, 4000);
+</script>
+{% endblock %}

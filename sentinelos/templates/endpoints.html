@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Endpoints{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Endpoints</h1><div class="sub">Every laptop running SentinelOS. Click one to see its processes.</div></div>
+  <span class="live">Live</span>
+</div>
+<div class="grid ep-grid" id="eps"></div>
+<div class="card" style="margin-top:16px">
+  <h2>Add a group member's laptop</h2>
+  <div class="small muted">On their laptop (same Wi-Fi, same <span class="mono">AGENT_TOKEN</span> in config.py) run:</div>
+  <div class="mono" style="margin-top:8px;padding:10px;background:var(--panel-2);border-radius:8px">python main.py --agent <span id="ip">SERVER_IP</span> --name "Their Name"</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("ip").textContent = location.hostname === "localhost" ? "<this laptop's IP>" : location.hostname;
+poll(async () => {
+  const d = await api("/api/endpoints");
+  if (!d) return;
+  const box = document.getElementById("eps");
+  if (!d.endpoints.length) { box.innerHTML = '<div class="card empty">Waiting for the first scan...</div>'; return; }
+  box.innerHTML = d.endpoints.map((e, i) => `
+    <a class="card ep" href="/endpoint/${encodeURIComponent(e.hostname)}">
+      <div class="ep-head">
+        <div><div class="ep-name"><span class="dot ${e.online ? "on" : "off"}"></span>${esc(e.hostname)}</div>
+          <div class="muted small">${esc(e.ip)} · ${esc(e.system.os)}</div></div>
+        ${e.online ? badge(e.threat_level) : '<span class="badge b-OK">OFFLINE</span>'}
+      </div>
+      <div style="margin-top:14px" class="row"><span>CPU</span><span>${e.system.cpu_percent}%</span></div>
+      <div class="meter"><div style="width:${e.system.cpu_percent}%"></div></div>
+      <div class="row"><span>Memory</span><span>${e.system.ram_used_percent}% of ${e.system.ram_total_gb} GB</span></div>
+      <div class="meter"><div style="width:${e.system.ram_used_percent}%"></div></div>
+      <div class="spark" data-i="${i}"></div>
+      <div class="row" style="margin-top:8px"><span>${e.process_count} processes</span>
+        <span>${e.risk_counts.HIGH + e.risk_counts.CRITICAL} high-risk</span><span>last seen ${timeOf(e.last_seen)}</span></div>
+    </a>`).join("");
+  box.querySelectorAll(".spark").forEach(el => {
+    const e = d.endpoints[el.dataset.i];
+    sparkline(el, e.history.map(h => h.cpu), seriesColor(+el.dataset.i));
+  });
+});
+</script>
+{% endblock %}

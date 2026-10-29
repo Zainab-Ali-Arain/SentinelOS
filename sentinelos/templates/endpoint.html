@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ host }}{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><a href="/endpoints" class="small">← All endpoints</a>
+    <h1 id="title">{{ host }}</h1><div class="sub" id="sub"></div></div>
+  <div style="display:flex;gap:12px;align-items:center"><span class="live">Live</span><span id="threat"></span></div>
+</div>
+
+<div class="grid kpis">
+  <div class="card kpi"><div class="label">CPU</div><div class="value" id="k-cpu">-</div><div class="hint" id="k-cores"></div></div>
+  <div class="card kpi" style="--kpi-color:#38bdf8"><div class="label">Memory</div><div class="value" id="k-ram">-</div><div class="hint" id="k-ramt"></div></div>
+  <div class="card kpi" style="--kpi-color:var(--low)"><div class="label">Processes</div><div class="value" id="k-proc">-</div><div class="hint">running now</div></div>
+  <div class="card kpi" style="--kpi-color:var(--high)"><div class="label">High-risk</div><div class="value" id="k-high">-</div><div class="hint">processes</div></div>
+  <div class="card kpi" style="--kpi-color:var(--medium)"><div class="label">Connections</div><div class="value" id="k-net">-</div><div class="hint">active</div></div>
+</div>
+
+<div class="card mb"><h2>CPU &amp; memory (live)</h2><div id="c-usage"></div></div>
+
+<div class="card">
+  <div class="tabs">
+    <button data-tab="procs" class="active">⚙️ Processes</button>
+    <button data-tab="tree">🌳 Process Tree</button>
+    <button data-tab="net">🌐 Network</button>
+    <button data-tab="files">📁 File Events</button>
+  </div>
+
+  <div data-pane="procs">
+    <div class="toolbar">
+      <input id="search" placeholder="Search process, PID, path..." style="flex:1;min-width:200px">
+      <select id="risk"><option value="">All risk levels</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+      <span class="muted small" id="count"></span>
+    </div>
+    <div class="table-wrap"><table id="ptable"><thead><tr>
+      <th data-key="pid">PID</th><th data-key="name">Process</th><th data-key="parent_name">Parent</th>
+      <th data-key="username">User</th><th data-key="cpu_percent">CPU %</th><th data-key="memory_mb">Memory MB</th>
+      <th data-key="threads">Threads</th><th data-key="score">Score</th><th>Risk</th><th>Reasons</th><th></th>
+    </tr></thead><tbody id="procs"></tbody></table></div>
+  </div>
+  <div data-pane="tree" hidden><div class="table-wrap tree" id="tree"></div></div>
+  <div data-pane="net" hidden><div class="table-wrap"><table><thead><tr><th>PID</th><th>Process</th><th>Local</th><th>Remote</th><th>Port</th><th>Status</th><th></th></tr></thead><tbody id="net"></tbody></table></div></div>
+  <div data-pane="files" hidden><div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>Path</th></tr></thead><tbody id="files"></tbody></table></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const HOST = {{ host|tojson }};
+const isLocal = HOST === SERVER_HOST;
+let data = null;
+const sortState = { key: "score", dir: -1 };
+const closed = new Set();   // process-tree nodes the user collapsed
+const sortRows = sortable(document.getElementById("ptable"), sortState, renderProcs);
+
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+}));
+document.getElementById("search").addEventListener("input", renderProcs);
+document.getElementById("risk").addEventListener("change", renderProcs);
+
+function renderProcs() {
+  if (!data) return;
+  const q = document.getElementById("search").value.toLowerCase();
+  const risk = document.getElementById("risk").value;
+  const rows = sortRows(data.processes.filter(p =>
+    (!risk || p.level === risk) &&
+    (!q || `${p.pid} ${p.name} ${p.path} ${p.parent_name}`.toLowerCase().includes(q))));
+  document.getElementById("count").textContent = `${rows.length} of ${data.processes.length}`;
+  document.getElementById("procs").innerHTML = rows.map(p => `
+    <tr class="row-${p.level}"><td class="mono">${p.pid}</td><td><b>${esc(p.name)}</b><div class="muted small trunc" title="${esc(p.path)}">${esc(p.path)}</div></td>
+    <td>${esc(p.parent_name)}</td><td class="small">${esc(p.username)}</td><td>${p.cpu_percent}</td><td>${p.memory_mb}</td>
+    <td>${p.threads}</td><td><b>${p.score}</b></td><td>${badge(p.level)}</td>
+    <td class="reasons">${esc(p.reasons.concat(p.notes).join(", "))}</td>
+    <td class="nowrap"><button class="btn ghost sm" title="Details" onclick="details(${p.pid})">🔍</button>
+      ${isLocal && ROLE === "admin" ? `<button class="btn danger sm" title="Terminate" onclick="terminate(${p.pid})">⛔</button>` : ""}</td></tr>`).join("");
+}
+
+function renderTree() {
+  const byPid = new Map(data.processes.map(p => [p.pid, p]));
+  const kids = new Map();
+  data.processes.forEach(p => {
+    const parent = byPid.has(p.ppid) && p.ppid !== p.pid ? p.ppid : 0;
+    if (!kids.has(parent)) kids.set(parent, []);
+    kids.get(parent).push(p);
+  });
+  const label = p => `<b>${esc(p.name)}</b> <span class="muted small">PID ${p.pid} · CPU ${p.cpu_percent}%</span> ${p.level !== "LOW" ? badge(p.level) : ""}`;
+  const node = (p, depth) => {
+    const children = (kids.get(p.pid) || []).sort((a, b) => a.pid - b.pid);
+    if (!children.length || depth > 40) return `<li><span class="leaf">${label(p)}</span></li>`;
+    return `<li><details data-pid="${p.pid}" ${closed.has(p.pid) ? "" : "open"}><summary>${label(p)}</summary>
+      <ul>${children.map(c => node(c, depth + 1)).join("")}</ul></details></li>`;
+  };
+  const el = document.getElementById("tree");
+  el.innerHTML = `<ul>${(kids.get(0) || []).sort((a, b) => a.pid - b.pid).map(p => node(p, 0)).join("")}</ul>`;
+  el.querySelectorAll("details").forEach(d => d.addEventListener("toggle", () =>
+    d.open ? closed.delete(+d.dataset.pid) : closed.add(+d.dataset.pid)));
+}
+
+async function details(pid) {
+  const p = data.processes.find(x => x.pid === pid) || {};
+  const info = { PID: p.pid, Name: p.name, Path: p.path, Parent: `${p.parent_name} (${p.ppid})`,
+    User: p.username, Started: p.start_time, "CPU %": p.cpu_percent, "Memory MB": p.memory_mb,
+    Threads: p.threads, "Risk": `${p.level} (score ${p.score})`, Reasons: p.reasons.join(", ") || "-",
+    Notes: p.notes.join(", ") || "-", "MITRE ATT&CK": p.mitre.join(", ") || "-" };
+  if (isLocal) Object.assign(info, await api(`/api/investigate/${pid}`) || {});
+  showModal(`Process ${p.name}`, info);
+}
+
+async function terminate(pid) {
+  const p = data.processes.find(x => x.pid === pid);
+  if (!confirm(`Terminate ${p.name} (PID ${pid})?\nOnly do this for test processes you recognise.`)) return;
+  const r = await api("/api/terminate", { method: "POST", body: JSON.stringify({ host: HOST, pid, name: p.name }) });
+  alert(r.message);
+}
+
+poll(async () => {
+  const d = await api(`/api/endpoint/${encodeURIComponent(HOST)}`);
+  if (!d || d.error) { document.getElementById("sub").textContent = "This endpoint has not reported yet."; return; }
+  data = d;
+  const s = d.system;
+  document.getElementById("sub").innerHTML = `<span class="dot ${d.online ? "on" : "off"}"></span>${d.online ? "Online" : "Offline"} · ${esc(d.ip)} · ${esc(s.os)} · booted ${esc(s.boot_time)}`;
+  document.getElementById("threat").innerHTML = `Threat ${badge(d.threat_level)}`;
+  document.getElementById("k-cpu").textContent = s.cpu_percent + "%";
+  document.getElementById("k-cores").textContent = `${s.cpu_cores} cores`;
+  document.getElementById("k-ram").textContent = s.ram_used_percent + "%";
+  document.getElementById("k-ramt").textContent = `of ${s.ram_total_gb} GB`;
+  document.getElementById("k-proc").textContent = d.processes.length;
+  document.getElementById("k-high").textContent = d.risk_counts.HIGH + d.risk_counts.CRITICAL;
+  document.getElementById("k-net").textContent = d.connections.length;
+  lineChart(document.getElementById("c-usage"), [
+    { name: "CPU", color: "#4f8cff", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
+    { name: "Memory", color: "#22c55e", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
+  renderProcs();
+  renderTree();
+  document.getElementById("net").innerHTML = d.connections.map(c => `
+    <tr class="${c.suspicious ? "row-HIGH" : ""}"><td class="mono">${c.pid}</td><td>${esc(c.process)}</td><td class="mono">${esc(c.local)}</td>
+    <td class="mono">${esc(c.remote_ip)}</td><td>${c.remote_port}</td><td class="small">${esc(c.status)}</td>
+    <td>${c.suspicious ? badge("HIGH") : ""}</td></tr>`).join("") || '<tr><td colspan="7" class="empty">No active connections</td></tr>';
+  document.getElementById("files").innerHTML = d.file_events.slice().reverse().map(e => `
+    <tr><td class="muted">${timeOf(e.time)}</td><td>${esc(e.type)}</td><td class="mono">${esc(e.path)}${e.dest ? " → " + esc(e.dest) : ""}</td></tr>`).join("")
+    || '<tr><td colspan="3" class="empty">No file activity in the monitored folder</td></tr>';
+});
+</script>
+{% endblock %}

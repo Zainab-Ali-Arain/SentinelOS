@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login · SentinelOS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="login-page">
+  <form class="login-box" method="post">
+    <div class="logo">🛡</div>
+    <h1>SentinelOS</h1>
+    <p>Mini Endpoint Detection &amp; Response</p>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" required autofocus>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <button class="btn" type="submit">Sign in</button>
+  </form>
+</div>
+</body>
+</html>

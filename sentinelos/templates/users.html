@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block content %}
+<div class="topbar"><div><h1>Users</h1><div class="sub">Who can log in to the dashboard</div></div></div>
+{% if message %}<div class="card mb {{ 'error' if message.startswith('Error') }}">{{ message }}</div>{% endif %}
+<div class="grid cols-2e">
+  <div class="card">
+    <h2>Accounts</h2>
+    <table><thead><tr><th>Username</th><th>Role</th><th></th></tr></thead><tbody>
+    {% for u in users %}
+      <tr><td><b>{{ u.username }}</b></td>
+        <td><span class="badge {{ 'b-NEW' if u.role == 'admin' else 'b-OK' }}">{{ u.role }}</span></td>
+        <td>{% if u.username != user %}
+          <form method="post" onsubmit="return confirm('Delete {{ u.username }}?')" style="margin:0">
+            <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="delete">
+            <input type="hidden" name="username" value="{{ u.username }}">
+            <button class="btn danger sm">Delete</button></form>{% else %}<span class="muted small">you</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody></table>
+  </div>
+  <div class="card">
+    <h2>Add or update a user</h2>
+    <form method="post" style="display:grid;gap:10px">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="add">
+      <input name="username" placeholder="Username (e.g. teacher)" required>
+      <input name="password" type="password" placeholder="Password (min 6 characters)" required minlength="6">
+      <select name="role">{% for r in roles %}<option value="{{ r }}" {{ 'selected' if r == 'viewer' }}>{{ r }}</option>{% endfor %}</select>
+      <button class="btn" type="submit">Save user</button>
+    </form>
+    <p class="muted small" style="margin-top:14px"><b>admin</b> can terminate processes, change alert status and manage users.<br>
+      <b>viewer</b> (e.g. the teacher) can see everything but cannot change anything.</p>
+  </div>
+</div>
+{% endblock %}

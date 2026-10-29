@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Activity Log{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Activity Log</h1><div class="sub">Process starts/stops, file changes, logins and responses</div></div>
+  <a class="btn ghost" href="/export/events.csv">⬇ Export CSV</a>
+</div>
+<div class="grid cols-2e mb">
+  <div class="card"><h2>Events by type</h2><div id="c-types"></div></div>
+  <div class="card"><h2>Events by laptop</h2><div id="c-eps"></div></div>
+</div>
+<div class="card">
+  <div class="toolbar">
+    <input id="search" placeholder="Search events..." style="flex:1;min-width:200px">
+    <select id="f-type"><option value="">All event types</option></select>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Time</th><th>Laptop</th><th>Event</th><th>Process</th><th>PID</th><th>Severity</th><th>Details</th></tr></thead>
+  <tbody id="rows"></tbody></table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let events = [];
+["search", "f-type"].forEach(id => document.getElementById(id).addEventListener("input", render));
+function render() {
+  const q = document.getElementById("search").value.toLowerCase(), t = document.getElementById("f-type").value;
+  document.getElementById("rows").innerHTML = events.filter(e => (!t || e.event_type === t) &&
+    (!q || JSON.stringify(e).toLowerCase().includes(q))).slice(0, 400).map(e => `
+    <tr class="${e.severity === "MEDIUM" ? "row-MEDIUM" : ""}"><td class="small muted">${esc(e.timestamp)}</td><td>${esc(e.endpoint)}</td>
+    <td><b>${esc(e.event_type)}</b></td><td>${esc(e.process)}</td><td class="mono">${e.pid || ""}</td>
+    <td>${e.severity === "MEDIUM" ? badge("MEDIUM") : '<span class="muted small">info</span>'}</td>
+    <td class="small mono trunc" title="${esc(e.details)}">${esc(e.details)}</td></tr>`).join("")
+    || '<tr><td colspan="7" class="empty">No events</td></tr>';
+}
+const countBy = (key) => Object.entries(events.reduce((m, e) => (m[e[key]] = (m[e[key]] || 0) + 1, m), {}))
+  .sort((a, b) => b[1] - a[1]).slice(0, 8);
+poll(async () => {
+  const d = await api("/api/events");
+  if (!d) return;
+  events = d.events;
+  barList(document.getElementById("c-types"), countBy("event_type").map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i) })));
+  barList(document.getElementById("c-eps"), countBy("endpoint").map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i + 1) })));
+  const sel = document.getElementById("f-type"), cur = sel.value;
+  sel.innerHTML = '<option value="">All event types</option>' + [...new Set(events.map(e => e.event_type))].sort()
+    .map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("");
+  render();
+}, 5000);
+</script>
+{% endblock %}

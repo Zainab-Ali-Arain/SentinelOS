@@ -80,10 +80,14 @@ UNUSUAL_PATH_MARKERS = [
 # Remote ports commonly linked to backdoors / test shells
 SUSPICIOUS_PORTS = {4444, 5555, 1337, 31337, 6667, 12345, 9001}
 
-# ---- Multi-endpoint (agent -> central server) ----
-SERVER_PORT = 9900
-# Shared secret: the agent and the server must use the same value.
+# ---- Web dashboard + agents ----
+WEB_PORT = 8000            # dashboard: http://<server-ip>:8000
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+SECRET_FILE = os.path.join(DATA_DIR, "secret.key")
+# Shared secret: agents and the server must use the same value.
 # Change it before the demo.
 AGENT_TOKEN = "change-this-secret-123"
 AGENT_INTERVAL_SEC = 5
-ENDPOINT_OFFLINE_SEC = 30   # no report for this long = endpoint offline
+ENDPOINT_OFFLINE_SEC = 30  # no report for this long = endpoint offline
+LOGIN_MAX_FAILS = 5        # failed logins before a short lockout
+LOGIN_LOCK_SEC = 60

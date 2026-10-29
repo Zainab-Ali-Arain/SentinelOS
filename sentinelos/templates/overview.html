@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Security Overview</h1><div class="sub">All monitored laptops at a glance</div></div>
+  <div style="display:flex;gap:12px;align-items:center"><span class="live">Live</span><span id="threat"></span></div>
+</div>
+
+<div class="grid kpis">
+  <div class="card kpi" style="--kpi-color:var(--accent)"><div class="label">Endpoints online</div><div class="value" id="k-ep">-</div><div class="hint">laptops reporting</div></div>
+  <div class="card kpi" style="--kpi-color:#38bdf8"><div class="label">Running processes</div><div class="value" id="k-proc">-</div><div class="hint">across all endpoints</div></div>
+  <div class="card kpi" style="--kpi-color:var(--high)"><div class="label">High / critical now</div><div class="value" id="k-high">-</div><div class="hint">risky processes</div></div>
+  <div class="card kpi" style="--kpi-color:var(--medium)"><div class="label">Total alerts</div><div class="value" id="k-alerts">-</div><div class="hint" id="k-new"></div></div>
+  <div class="card kpi" style="--kpi-color:var(--low)"><div class="label">Avg CPU</div><div class="value" id="k-cpu">-</div><div class="hint">online endpoints</div></div>
+</div>
+
+<div class="grid cols-2 mb">
+  <div class="card"><h2>CPU usage per laptop</h2><div id="c-cpu"></div></div>
+  <div class="card"><h2>Process risk levels</h2><div id="c-risk"></div></div>
+</div>
+<div class="grid cols-2e mb">
+  <div class="card"><h2>Memory usage per laptop</h2><div id="c-ram"></div></div>
+  <div class="card"><h2>Alerts by type</h2><div id="c-types"></div><h2 style="margin-top:18px">Alerts by laptop</h2><div id="c-eps"></div></div>
+</div>
+<div class="card">
+  <div class="topbar" style="margin-bottom:8px"><h2 style="margin:0">Latest alerts</h2><a href="/alerts">View all →</a></div>
+  <div class="table-wrap"><table><thead><tr><th>Time</th><th>Laptop</th><th>Type</th><th>Process</th><th>Severity</th><th>MITRE ATT&amp;CK</th></tr></thead>
+  <tbody id="t-alerts"></tbody></table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+poll(async () => {
+  const d = await api("/api/overview");
+  if (!d) return;
+  const online = d.endpoints.filter(e => e.online);
+  document.getElementById("k-ep").textContent = `${online.length} / ${d.endpoints.length}`;
+  document.getElementById("k-proc").textContent = online.reduce((a, e) => a + e.process_count, 0);
+  document.getElementById("k-high").textContent = d.risk.HIGH + d.risk.CRITICAL;
+  document.getElementById("k-alerts").textContent = d.alert_total;
+  document.getElementById("k-new").textContent = `${d.new_alerts} not reviewed`;
+  const cpu = online.length ? online.reduce((a, e) => a + e.system.cpu_percent, 0) / online.length : 0;
+  document.getElementById("k-cpu").textContent = cpu.toFixed(1) + "%";
+  const worst = online.map(e => e.threat_level).sort((a, b) => LEVELS.indexOf(b) - LEVELS.indexOf(a))[0] || "LOW";
+  document.getElementById("threat").innerHTML = `Threat level ${badge(worst)}`;
+
+  const series = key => d.endpoints.map((e, i) => ({ name: e.hostname, color: seriesColor(i),
+    points: e.history.map(h => ({ t: h.t, v: h[key] })) }));
+  lineChart(document.getElementById("c-cpu"), series("cpu"));
+  lineChart(document.getElementById("c-ram"), series("ram"), { height: 180 });
+  donutChart(document.getElementById("c-risk"),
+    LEVELS.map(l => ({ label: l, value: d.risk[l], color: RISK_COLORS[l] })), "processes");
+  barList(document.getElementById("c-types"), Object.entries(d.by_type)
+    .sort((a, b) => b[1] - a[1]).map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i + 2) })));
+  barList(document.getElementById("c-eps"), Object.entries(d.by_endpoint)
+    .sort((a, b) => b[1] - a[1]).map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i) })));
+  document.getElementById("t-alerts").innerHTML = d.recent_alerts.map(a => `
+    <tr class="row-${esc(a.severity)}"><td class="muted">${esc(a.timestamp.slice(11))}</td><td>${esc(a.endpoint)}</td>
+    <td>${esc(a.alert_type)}</td><td>${esc(a.process)}</td><td>${badge(a.severity)}</td>
+    <td class="small trunc">${esc(a.mitre)}</td></tr>`).join("") ||
+    '<tr><td colspan="6" class="empty">No alerts yet 🎉</td></tr>';
+});
+</script>
+{% endblock %}

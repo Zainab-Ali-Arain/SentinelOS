@@ -1,13 +1,23 @@
 """SentinelOS - Mini Endpoint Detection & Response System.
 
 Usage:
-    python main.py                    # open the dashboard (GUI)
-    python main.py --server           # dashboard + receive reports from agents
-    python main.py --agent SERVER_IP  # monitor this laptop, report to the server
-    python main.py --cli              # console mode (no GUI)
+    python main.py                                  # web dashboard on http://localhost:8000
+    python main.py --agent SERVER_IP [--name NAME]  # monitor this laptop, report to the server
+    python main.py --add-user                       # create a dashboard account
+    python main.py --cli                            # console mode (no dashboard)
 """
+import os
 import sys
 import time
+
+
+def arg_value(flag):
+    if flag in sys.argv:
+        i = sys.argv.index(flag)
+        if i + 1 < len(sys.argv):
+            return sys.argv[i + 1]
+        sys.exit(f"Missing value after {flag}")
+    return None
 
 
 def run_cli():
@@ -38,14 +48,18 @@ def run_cli():
 
 
 if __name__ == "__main__":
+    name = arg_value("--name")
+    if name:
+        os.environ["SENTINEL_NAME"] = name  # must be set before sentinelos is imported
     if "--cli" in sys.argv:
         run_cli()
     elif "--agent" in sys.argv:
-        i = sys.argv.index("--agent")
-        if i + 1 >= len(sys.argv):
-            sys.exit("Usage: python main.py --agent SERVER_IP")
         from sentinelos.remote import run_agent
-        run_agent(sys.argv[i + 1])
+        run_agent(arg_value("--agent"))
+    elif "--add-user" in sys.argv:
+        from sentinelos.auth import UserStore
+        from sentinelos.setup import add_user_cli
+        add_user_cli(UserStore())
     else:
-        from sentinelos.dashboard import run
-        run(server="--server" in sys.argv)
+        from sentinelos.webapp import run_server
+        run_server()

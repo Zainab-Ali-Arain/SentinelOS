@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf" content="{{ csrf }}">
+  <meta name="role" content="{{ role }}">
+  <meta name="host" content="{{ hostname }}">
+  <title>{% block title %}SentinelOS{% endblock %} · SentinelOS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">🛡</div><div>SentinelOS<small>Mini EDR</small></div></div>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if page == 'overview' }}">📊 Overview</a>
+      <a href="/endpoints" class="{{ 'active' if page == 'endpoints' }}">💻 Endpoints</a>
+      <a href="/alerts" class="{{ 'active' if page == 'alerts' }}">🚨 Alerts
+        <span id="nav-alerts" class="badge b-HIGH" style="margin-left:auto"></span></a>
+      <a href="/activity" class="{{ 'active' if page == 'activity' }}">📜 Activity Log</a>
+      {% if role == 'admin' %}<a href="/users" class="{{ 'active' if page == 'users' }}">👥 Users</a>{% endif %}
+    </nav>
+    <div class="me"><b>{{ user }}</b><span class="muted small">{{ role }}</span> · <a href="/logout">Log out</a></div>
+  </aside>
+  <main>{% block content %}{% endblock %}</main>
+</div>
+<div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="box"></div></div>
+<div id="toasts"></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

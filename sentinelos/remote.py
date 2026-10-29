@@ -1,106 +1,86 @@
-"""Multi-endpoint support: an AGENT on another laptop sends its results to a
-central SERVER (the dashboard laptop) over the local network (HTTP + JSON).
+"""Multi-endpoint support.
+
+AGENT: runs on a group member's laptop, scans it and sends a report to the
+server every few seconds (HTTP + JSON, protected by a shared token).
+HUB:   lives inside the web server and keeps the latest report of every
+endpoint (including the server laptop itself) plus a short history for graphs.
 
 Only use this on computers whose owner has agreed to be monitored.
 """
-import hmac
 import json
 import time
 import threading
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from collections import deque
 
 from . import config
 
-MAX_BODY = 2 * 1024 * 1024  # reject reports bigger than 2 MB
+HISTORY_POINTS = 120  # points kept per endpoint for the graphs
 
 
 def build_report(state, alerts):
-    """Small summary of one scan (the full process list is not needed)."""
+    """Everything the dashboard needs about one endpoint from one scan."""
     return {
         "hostname": state["hostname"],
         "system": state["system"],
         "threat_level": state["threat_level"],
         "risk_counts": state["risk_counts"],
-        "process_count": len(state["processes"]),
-        "top_processes": [
-            {k: p[k] for k in ("pid", "name", "cpu_percent", "memory_mb", "score",
-                               "level", "reasons", "path", "parent_name")}
-            for p in state["processes"][:40]],
+        "monitored_files": state["monitored_files"],
+        "processes": [
+            {k: p[k] for k in ("pid", "ppid", "name", "parent_name", "cpu_percent",
+                               "memory_mb", "threads", "score", "level", "reasons",
+                               "notes", "mitre", "path", "username", "start_time")}
+            for p in state["processes"]],
+        "connections": state["connections"][:300],
+        "file_events": state["file_events"][-50:],
         "alerts": alerts,
     }
 
 
-# ------------------------------ server ------------------------------
-class EndpointServer:
-    """Receives reports from agents. Runs inside the dashboard process."""
+class Hub:
+    """Latest state of every endpoint, shared by the web pages."""
 
-    def __init__(self, db, port=config.SERVER_PORT):
+    def __init__(self, db):
         self.db = db
-        self.port = port
-        self.endpoints = {}        # hostname -> latest report + ip + last_seen
-        self.incoming_alerts = []  # remote alerts waiting to be shown as popups
         self.lock = threading.Lock()
-        self.httpd = None
+        self.endpoints = {}  # hostname -> report + ip + last_seen + history
 
-    def start(self):
-        server = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                token = self.headers.get("X-Sentinel-Token", "")
-                if not hmac.compare_digest(token, config.AGENT_TOKEN):
-                    return self._reply(403, "bad token")
-                length = int(self.headers.get("Content-Length", 0))
-                if self.path != "/report" or not 0 < length <= MAX_BODY:
-                    return self._reply(400, "bad request")
-                try:
-                    report = json.loads(self.rfile.read(length))
-                    server.handle_report(report, self.client_address[0])
-                except (ValueError, KeyError, TypeError) as exc:
-                    return self._reply(400, f"invalid report: {exc}")
-                self._reply(200, "ok")
-
-            def _reply(self, code, text):
-                self.send_response(code)
-                self.end_headers()
-                self.wfile.write(text.encode())
-
-            def log_message(self, *args):  # keep the console quiet
-                pass
-
-        self.httpd = ThreadingHTTPServer(("0.0.0.0", self.port), Handler)
-        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
-        self.db.add_event("SERVER_START", details=f"Listening for agents on port {self.port}")
-
-    def stop(self):
-        if self.httpd:
-            self.httpd.shutdown()
-
-    def handle_report(self, report, ip):
+    def update(self, report, ip, local=False):
         host = str(report["hostname"])[:64]
-        for a in report.get("alerts", []):
-            self.db.add_alert(a["type"], a["process"], a["pid"], a["score"], a["level"],
-                              a["reasons"], a.get("details"), a.get("mitre", []),
-                              endpoint=host, timestamp=a.get("timestamp"))
+        if not local:  # local alerts were already saved by the local engine
+            for a in report.get("alerts", []):
+                self.db.add_alert(a["type"], a["process"], a["pid"], a["score"], a["level"],
+                                  a["reasons"], a.get("details"), a.get("mitre", []),
+                                  endpoint=host, timestamp=a.get("timestamp"))
+        point = {"t": time.time(), "cpu": report["system"]["cpu_percent"],
+                 "ram": report["system"]["ram_used_percent"],
+                 "procs": len(report["processes"])}
         with self.lock:
-            if host not in self.endpoints:
+            old = self.endpoints.get(host)
+            if old is None:
                 self.db.add_event("ENDPOINT_CONNECTED", details=f"{host} ({ip})", endpoint=host)
-            self.endpoints[host] = {**report, "ip": ip, "last_seen": time.time()}
-            self.incoming_alerts.extend({**a, "endpoint": host} for a in report.get("alerts", []))
+            history = old["history"] if old else deque(maxlen=HISTORY_POINTS)
+            history.append(point)
+            self.endpoints[host] = {**report, "ip": ip, "last_seen": time.time(),
+                                    "local": local, "history": history}
 
-    def take_alerts(self):
-        with self.lock:
-            out, self.incoming_alerts = self.incoming_alerts, []
-        return out
+    def _view(self, e, full):
+        view = {k: v for k, v in e.items() if full or k not in
+                ("processes", "connections", "file_events", "history")}
+        view["online"] = time.time() - e["last_seen"] < config.ENDPOINT_OFFLINE_SEC
+        view["history"] = list(e["history"])
+        view["process_count"] = len(e["processes"])
+        view.pop("alerts", None)
+        return view
 
-    def snapshot(self):
-        """List of endpoints with an ONLINE/OFFLINE status."""
+    def summary(self):
         with self.lock:
-            items = list(self.endpoints.values())
-        for e in items:
-            e["online"] = time.time() - e["last_seen"] < config.ENDPOINT_OFFLINE_SEC
-        return items
+            return [self._view(e, False) for e in self.endpoints.values()]
+
+    def detail(self, host):
+        with self.lock:
+            e = self.endpoints.get(host)
+            return self._view(e, True) if e else None
 
 
 # ------------------------------ agent ------------------------------
@@ -109,7 +89,7 @@ def run_agent(server_ip):
     from .engine import SentinelEngine
     from .database import HOSTNAME
 
-    url = f"http://{server_ip}:{config.SERVER_PORT}/report"
+    url = f"http://{server_ip}:{config.WEB_PORT}/api/report"
     engine = SentinelEngine()
     engine.start()
     pending = []  # alerts not delivered yet (server unreachable)
