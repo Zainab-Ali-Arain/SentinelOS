@@ -88,8 +88,26 @@ class Database:
     def recent_alerts(self, limit=200):
         return self._read("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))
 
-    def recent_events(self, limit=300):
-        return self._read("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+    EVENT_GROUPS = {"process": "PROCESS_%", "file": "FILE_%", "login": "LOGIN_%",
+                    "response": "RESPONSE_%", "network": "%CONNECTION%"}
+
+    def recent_events(self, limit=300, group="", search=""):
+        """Newest events, optionally only one group (e.g. "process") or matching text."""
+        sql, params = "SELECT * FROM events WHERE 1=1", []
+        if group in self.EVENT_GROUPS:
+            sql += " AND event_type LIKE ?"
+            params.append(self.EVENT_GROUPS[group])
+        if search:
+            sql += " AND (event_type || ' ' || process || ' ' || details || ' ' || endpoint) LIKE ?"
+            params.append(f"%{search}%")
+        return self._read(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
+
+    def event_counts(self, column):
+        """How many events per event_type or per endpoint (for the charts)."""
+        if column not in ("event_type", "endpoint"):
+            raise ValueError(column)
+        return {r["k"]: r["n"] for r in self._read(
+            f"SELECT {column} AS k, COUNT(*) AS n FROM events GROUP BY {column}")}
 
     def get_alert(self, alert_id):
         rows = self._read("SELECT * FROM alerts WHERE id = ?", (alert_id,))

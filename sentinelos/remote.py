@@ -27,7 +27,7 @@ def build_report(state, alerts):
         "risk_counts": state["risk_counts"],
         "monitored_files": state["monitored_files"],
         "processes": [
-            {k: p[k] for k in ("pid", "ppid", "name", "parent_name", "cpu_percent",
+            {k: p[k] for k in ("pid", "ppid", "name", "app", "system", "parent_name", "cpu_percent",
                                "memory_mb", "threads", "score", "level", "reasons",
                                "notes", "mitre", "path", "username", "start_time")}
             for p in state["processes"]],

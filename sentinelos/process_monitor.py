@@ -5,6 +5,8 @@ import datetime
 
 import psutil
 
+from .app_names import app_name, is_system
+
 
 class ProcessMonitor:
     """Collects process data. Remembers the previous scan so it can tell how
@@ -12,7 +14,7 @@ class ProcessMonitor:
 
     def __init__(self):
         self.prev_writes = {}  # pid -> write_count at last scan
-        self.prev_names = None  # pid -> name at last scan (None = first scan)
+        self.prev_names = None  # pid -> (name, app) at last scan (None = first scan)
         self.started, self.stopped = [], []  # process timeline since last scan
         self.own_pid = os.getpid()
 
@@ -62,15 +64,17 @@ class ProcessMonitor:
         names = {p["pid"]: p["name"] for p in results}
         for info in results:
             info["parent_name"] = names.get(info["ppid"], "")
+            info["app"] = app_name(info["name"], info["path"])   # e.g. "Microsoft Word"
+            info["system"] = is_system(info)                    # background OS process?
 
         # Timeline: compare this scan's PIDs with the previous scan
         if self.prev_names is None:
             self.started, self.stopped = [], []
         else:
             self.started = [p for p in results if p["pid"] not in self.prev_names]
-            self.stopped = [{"pid": pid, "name": name} for pid, name in self.prev_names.items()
-                            if pid not in names]
-        self.prev_names = names
+            self.stopped = [{"pid": pid, "name": name, "app": app}
+                            for pid, (name, app) in self.prev_names.items() if pid not in names]
+        self.prev_names = {p["pid"]: (p["name"], p["app"]) for p in results}
         return results
 
 

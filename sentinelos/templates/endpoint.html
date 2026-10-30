@@ -27,12 +27,14 @@
 
   <div data-pane="procs">
     <div class="toolbar">
-      <input id="search" placeholder="Search process, PID, path..." style="flex:1;min-width:200px">
+      <input id="search" placeholder="Search app, process, PID, path..." style="flex:1;min-width:200px">
+      <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="mine" checked> Only my apps (hide Windows background processes)</label>
       <select id="risk"><option value="">All risk levels</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
       <span class="muted small" id="count"></span>
     </div>
     <div class="table-wrap"><table id="ptable"><thead><tr>
-      <th data-key="pid">PID</th><th data-key="name">Process</th><th data-key="parent_name">Parent</th>
+      <th data-key="pid">PID</th><th data-key="app">App / Process</th><th data-key="parent_name">Parent</th>
       <th data-key="username">User</th><th data-key="cpu_percent">CPU %</th><th data-key="memory_mb">Memory MB</th>
       <th data-key="threads">Threads</th><th data-key="score">Score</th><th>Risk</th><th>Reasons</th><th></th>
     </tr></thead><tbody id="procs"></tbody></table></div>
@@ -56,18 +58,21 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
 }));
 document.getElementById("search").addEventListener("input", renderProcs);
+document.getElementById("mine").addEventListener("change", renderProcs);
 document.getElementById("risk").addEventListener("change", renderProcs);
 
 function renderProcs() {
   if (!data) return;
   const q = document.getElementById("search").value.toLowerCase();
   const risk = document.getElementById("risk").value;
+  const mine = document.getElementById("mine").checked;
   const rows = sortRows(data.processes.filter(p =>
     (!risk || p.level === risk) &&
-    (!q || `${p.pid} ${p.name} ${p.path} ${p.parent_name}`.toLowerCase().includes(q))));
+    (!mine || !p.system || p.level !== "LOW") &&   // risky system processes always stay visible
+    (!q || `${p.pid} ${p.app} ${p.name} ${p.path} ${p.parent_name}`.toLowerCase().includes(q))));
   document.getElementById("count").textContent = `${rows.length} of ${data.processes.length}`;
   document.getElementById("procs").innerHTML = rows.map(p => `
-    <tr class="row-${p.level}"><td class="mono">${p.pid}</td><td><b>${esc(p.name)}</b><div class="muted small trunc" title="${esc(p.path)}">${esc(p.path)}</div></td>
+    <tr class="row-${p.level}"><td class="mono">${p.pid}</td><td><b>${esc(p.app)}</b><div class="muted small trunc" title="${esc(p.path)}">${esc(p.name)} · ${esc(p.path || "path hidden by Windows")}</div></td>
     <td>${esc(p.parent_name)}</td><td class="small">${esc(p.username)}</td><td>${p.cpu_percent}</td><td>${p.memory_mb}</td>
     <td>${p.threads}</td><td><b>${p.score}</b></td><td>${badge(p.level)}</td>
     <td class="reasons">${esc(p.reasons.concat(p.notes).join(", "))}</td>
@@ -83,7 +88,7 @@ function renderTree() {
     if (!kids.has(parent)) kids.set(parent, []);
     kids.get(parent).push(p);
   });
-  const label = p => `<b>${esc(p.name)}</b> <span class="muted small">PID ${p.pid} · CPU ${p.cpu_percent}%</span> ${p.level !== "LOW" ? badge(p.level) : ""}`;
+  const label = p => `<b>${esc(p.app)}</b> <span class="muted small">${esc(p.name)} · PID ${p.pid} · CPU ${p.cpu_percent}%</span> ${p.level !== "LOW" ? badge(p.level) : ""}`;
   const node = (p, depth) => {
     const children = (kids.get(p.pid) || []).sort((a, b) => a.pid - b.pid);
     if (!children.length || depth > 40) return `<li><span class="leaf">${label(p)}</span></li>`;
@@ -98,17 +103,17 @@ function renderTree() {
 
 async function details(pid) {
   const p = data.processes.find(x => x.pid === pid) || {};
-  const info = { PID: p.pid, Name: p.name, Path: p.path, Parent: `${p.parent_name} (${p.ppid})`,
+  const info = { App: p.app, PID: p.pid, Process: p.name, Path: p.path, Parent: `${p.parent_name} (${p.ppid})`,
     User: p.username, Started: p.start_time, "CPU %": p.cpu_percent, "Memory MB": p.memory_mb,
     Threads: p.threads, "Risk": `${p.level} (score ${p.score})`, Reasons: p.reasons.join(", ") || "-",
     Notes: p.notes.join(", ") || "-", "MITRE ATT&CK": p.mitre.join(", ") || "-" };
   if (isLocal) Object.assign(info, await api(`/api/investigate/${pid}`) || {});
-  showModal(`Process ${p.name}`, info);
+  showModal(`${p.app} (${p.name})`, info);
 }
 
 async function terminate(pid) {
   const p = data.processes.find(x => x.pid === pid);
-  if (!confirm(`Terminate ${p.name} (PID ${pid})?\nOnly do this for test processes you recognise.`)) return;
+  if (!confirm(`Terminate ${p.app} (${p.name}, PID ${pid})?\nOnly do this for test processes you recognise.`)) return;
   const r = await api("/api/terminate", { method: "POST", body: JSON.stringify({ host: HOST, pid, name: p.name }) });
   alert(r.message);
 }

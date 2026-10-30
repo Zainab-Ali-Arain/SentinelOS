@@ -47,7 +47,8 @@ class SentinelEngine:
             if LEVEL_ORDER.index(proc["level"]) >= LEVEL_ORDER.index(config.ALERT_LEVEL):
                 alert = self._raise("PROCESS_ALERT", proc["name"], proc["pid"],
                                     proc["score"], proc["level"], proc["reasons"],
-                                    {"path": proc["path"], "cmdline": proc["cmdline"],
+                                    {"app": proc["app"], "path": proc["path"],
+                                     "cmdline": proc["cmdline"],
                                      "parent": f"{proc['parent_name']} ({proc['ppid']})",
                                      "cpu": proc["cpu_percent"], "memory_mb": proc["memory_mb"],
                                      "notes": proc["notes"]},
@@ -79,10 +80,10 @@ class SentinelEngine:
 
         # Process timeline (start / stop events)
         for p in self.process_monitor.started:
-            self.db.add_event("PROCESS_START", p["name"], p["pid"],
+            self.db.add_event("PROCESS_START", f"{p['app']} ({p['name']})", p["pid"],
                               details=f"parent={p['parent_name']} ({p['ppid']}) {p['path']}")
         for p in self.process_monitor.stopped:
-            self.db.add_event("PROCESS_STOP", p["name"], p["pid"])
+            self.db.add_event("PROCESS_STOP", f"{p['app']} ({p['name']})", p["pid"])
 
         for c in connections:
             if c["suspicious"]:

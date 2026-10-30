@@ -204,7 +204,10 @@ def create_app(engine=None, users=None):
     @app.route("/api/events")
     @login_required
     def api_events():
-        return jsonify(events=engine.db.recent_events(500))
+        return jsonify(events=engine.db.recent_events(
+                           400, request.args.get("group", ""), request.args.get("q", "")[:100]),
+                       by_type=engine.db.event_counts("event_type"),
+                       by_endpoint=engine.db.event_counts("endpoint"))
 
     @app.route("/api/alerts/<int:alert_id>/status", methods=["POST"])
     @admin_required
