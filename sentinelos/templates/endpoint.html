@@ -84,7 +84,7 @@ function renderTree() {
   const byPid = new Map(data.processes.map(p => [p.pid, p]));
   const kids = new Map();
   data.processes.forEach(p => {
-    const parent = byPid.has(p.ppid) && p.ppid !== p.pid ? p.ppid : 0;
+    const parent = byPid.has(p.ppid) && p.ppid !== p.pid ? p.ppid : "root";  // not 0: PID 0 is a real process
     if (!kids.has(parent)) kids.set(parent, []);
     kids.get(parent).push(p);
   });
@@ -96,7 +96,7 @@ function renderTree() {
       <ul>${children.map(c => node(c, depth + 1)).join("")}</ul></details></li>`;
   };
   const el = document.getElementById("tree");
-  el.innerHTML = `<ul>${(kids.get(0) || []).sort((a, b) => a.pid - b.pid).map(p => node(p, 0)).join("")}</ul>`;
+  el.innerHTML = `<ul>${(kids.get("root") || []).sort((a, b) => a.pid - b.pid).map(p => node(p, 0)).join("")}</ul>`;
   el.querySelectorAll("details").forEach(d => d.addEventListener("toggle", () =>
     d.open ? closed.delete(+d.dataset.pid) : closed.add(+d.dataset.pid)));
 }
