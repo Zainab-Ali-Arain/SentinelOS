@@ -8,7 +8,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 from . import config
 
-ROLES = ("admin", "viewer")  # viewer = can look, cannot respond (e.g. teacher)
+ROLES = ("admin", "viewer")  # viewer = can look, cannot respond
+ALL_LAPTOPS = "*"            # a viewer linked to "*" may see every laptop (e.g. teacher)
 
 
 class UserStore:
@@ -27,16 +28,20 @@ class UserStore:
         with open(self.path, "w") as f:
             json.dump(self.users, f, indent=2)
 
-    def add(self, username, password, role="viewer"):
-        username = username.strip()
+    def add(self, username, password, role="viewer", endpoint=""):
+        """Save a user. A viewer only sees the laptop named in `endpoint`."""
+        username, endpoint = username.strip(), endpoint.strip()
         if not username or not password:
             raise ValueError("username and password are required")
         if role not in ROLES:
             raise ValueError(f"role must be one of {ROLES}")
         if len(password) < 6:
             raise ValueError("password must be at least 6 characters")
+        if role == "viewer" and not endpoint:
+            raise ValueError("choose which laptop this viewer may see")
         with self.lock:
-            self.users[username] = {"hash": generate_password_hash(password), "role": role}
+            self.users[username] = {"hash": generate_password_hash(password), "role": role,
+                                    "endpoint": endpoint if role == "viewer" else ""}
             self._save()
 
     def delete(self, username):
@@ -48,8 +53,19 @@ class UserStore:
         user = self.users.get(username)
         return user["role"] if user else None
 
+    def scope(self, username):
+        """Laptop this user may see: None = every laptop, otherwise one hostname.
+        A viewer from an older users.json (no laptop chosen yet) sees nothing."""
+        user = self.users.get(username)
+        if not user:
+            return ""
+        if user["role"] == "admin" or user.get("endpoint") == ALL_LAPTOPS:
+            return None
+        return user.get("endpoint", "")
+
     def list(self):
-        return [{"username": u, "role": d["role"]} for u, d in sorted(self.users.items())]
+        return [{"username": u, "role": d["role"], "endpoint": d.get("endpoint", "")}
+                for u, d in sorted(self.users.items())]
 
     def locked(self, username):
         count, since = self.failures.get(username, (0, 0))

@@ -6,20 +6,24 @@
   <span class="live">Live</span>
 </div>
 <div class="grid ep-grid" id="eps"></div>
+{% if role == 'admin' %}
 <div class="card" style="margin-top:16px">
   <h2>Add a group member's laptop</h2>
   <div class="small muted">On their laptop (same Wi-Fi, same <span class="mono">AGENT_TOKEN</span> in config.py) run:</div>
   <div class="mono" style="margin-top:8px;padding:10px;background:var(--panel-2);border-radius:8px">python main.py --agent <span id="ip">SERVER_IP</span> --name "Their Name"</div>
 </div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
-document.getElementById("ip").textContent = location.hostname === "localhost" ? "<this laptop's IP>" : location.hostname;
+const ipBox = document.getElementById("ip");
+if (ipBox) ipBox.textContent = location.hostname === "localhost" ? "<this laptop's IP>" : location.hostname;
 poll(async () => {
   const d = await api("/api/endpoints");
   if (!d) return;
   const box = document.getElementById("eps");
-  if (!d.endpoints.length) { box.innerHTML = '<div class="card empty">Waiting for the first scan...</div>'; return; }
+  if (!d.endpoints.length) { box.innerHTML = `<div class="card empty">${ROLE === "admin" ? "Waiting for the first scan..."
+    : "Your laptop is not reporting yet. Start the agent with the laptop name the admin gave you."}</div>`; return; }
   box.innerHTML = d.endpoints.map((e, i) => `
     <a class="card ep" href="/endpoint/${encodeURIComponent(e.hostname)}">
       <div class="ep-head">

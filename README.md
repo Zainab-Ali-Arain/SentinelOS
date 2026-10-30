@@ -11,6 +11,7 @@ pages**.
 ## Features
 
 - **Login** with hashed passwords, roles (**admin** / **viewer**), lockout after 5 wrong tries
+- **Per-laptop viewers:** admin sees every laptop; each viewer sees only the laptop linked to their account
 - **4 dashboards:** Overview (graphs), Endpoints, Alerts, Activity Log (+ Users page for admins)
 - **Live graphs:** CPU and memory per laptop, risk levels, alerts by type and by laptop
 - **Multi-endpoint:** agents on group members' laptops report to one dashboard
@@ -22,7 +23,7 @@ pages**.
 - **IoC blocklist** (`iocs.json`): known-bad hashes, process names and IPs
 - **Rule-based risk scoring** with **MITRE ATT&CK** mapping
 - **Safe responses:** terminate (admin only, confirmed), mark alerts reviewed/resolved/false positive
-- **SQLite logging** + CSV export
+- **SQLite logging** + CSV export; old activity events are deleted after 7 days and the log file rolls over at 5 MB, so the disk never fills up
 - **17 unit tests** (detection rules + login/API security)
 
 ## Setup
@@ -46,9 +47,11 @@ sign in.
 
 ![Login](docs/login.png)
 
-**Teacher account:** log in as admin → **Users** → add e.g. `teacher` with role
-**viewer**. A viewer can see every page but cannot terminate processes or
-change anything. The teacher can open the dashboard from their own device on
+**Viewer accounts:** log in as admin → **Users** → add a user with role
+**viewer** and choose the **laptop** they may see (the name their agent uses,
+e.g. `Saifullah`). That viewer sees only that laptop's processes, alerts and
+activity, and cannot terminate processes or change anything. For the teacher,
+choose `*` (all laptops, read-only). The teacher can open the dashboard from their own device on
 the same Wi-Fi using the address the terminal prints
 (`http://<your-ip>:8000`).
 
@@ -59,7 +62,7 @@ protected system processes. Without it the EDR still works and skips them.
 
 | Page | What it shows |
 |---|---|
-| **Overview** | KPIs, CPU and memory graphs per laptop, risk-level donut, alerts by type and by laptop, latest alerts |
+| **Overview** | KPIs, then one graph at a time chosen from a tab bar (CPU, Memory, Risk levels, Alerts by type, Alerts by laptop), latest alerts |
 | **Endpoints** | One card per laptop (online/offline, threat level, CPU, memory). Click a card for all its running processes (search, sort, filter by risk), process tree, network connections and file events |
 | **Alerts** | Every alert with severity, reasons and MITRE ATT&CK IDs; filters; click for details and to mark reviewed/resolved/false positive; CSV export |
 | **Activity Log** | Process starts/stops, file changes, logins, responses; charts; CSV export |

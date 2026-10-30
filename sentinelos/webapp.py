@@ -15,7 +15,7 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request,
                    send_file, session, url_for)
 
 from . import config, response
-from .auth import ROLES, UserStore
+from .auth import ALL_LAPTOPS, ROLES, UserStore
 from .database import HOSTNAME
 from .engine import SentinelEngine
 from .remote import Hub, build_report
@@ -77,6 +77,17 @@ def create_app(engine=None, users=None):
             return view(*args, **kwargs)
         return wrapper
 
+    # ---------- who may see which laptop ----------
+    def scope():
+        """None = this user sees every laptop (admin); otherwise only this hostname."""
+        return users.scope(session["user"])
+
+    def can_see(host):
+        return scope() in (None, host)
+
+    def visible(endpoints):
+        return [e for e in endpoints if can_see(e["hostname"])]
+
     @app.before_request
     def csrf_protect():
         """Every form/API POST must carry the session's CSRF token."""
@@ -89,6 +100,7 @@ def create_app(engine=None, users=None):
     def template_globals():
         user = session.get("user")
         return {"user": user, "role": users.role(user) if user else None,
+                "scope": users.scope(user) if user else "",
                 "csrf": session.get("csrf", ""), "hostname": HOSTNAME}
 
     # ---------- pages ----------
@@ -130,6 +142,8 @@ def create_app(engine=None, users=None):
     @app.route("/endpoint/<host>")
     @login_required
     def endpoint(host):
+        if not can_see(host):
+            abort(403)
         return render_template("endpoint.html", page="endpoints", host=host)
 
     @app.route("/alerts")
@@ -152,7 +166,8 @@ def create_app(engine=None, users=None):
             action, name = request.form.get("action"), request.form.get("username", "")
             try:
                 if action == "add":
-                    users.add(name, request.form.get("password", ""), request.form.get("role"))
+                    users.add(name, request.form.get("password", ""), request.form.get("role"),
+                              request.form.get("endpoint", ""))
                     message = f"User '{name}' saved."
                 elif action == "delete" and name != session["user"]:
                     users.delete(name)
@@ -161,15 +176,16 @@ def create_app(engine=None, users=None):
                                     details=f"{name} by {session['user']}")
             except ValueError as exc:
                 message = f"Error: {exc}"
-        return render_template("users.html", page="users", users=users.list(),
-                               roles=ROLES, message=message)
+        laptops = sorted({e["hostname"] for e in hub.summary()} | {HOSTNAME})
+        return render_template("users.html", page="users", users=users.list(), roles=ROLES,
+                               laptops=laptops, all_laptops=ALL_LAPTOPS, message=message)
 
     # ---------- JSON APIs (used by the pages every few seconds) ----------
     @app.route("/api/overview")
     @login_required
     def api_overview():
-        eps = hub.summary()
-        alerts = engine.db.recent_alerts(500)
+        eps = visible(hub.summary())
+        alerts = engine.db.recent_alerts(500, scope())
         by_type, by_endpoint = {}, {}
         for a in alerts:
             by_type[a["alert_type"]] = by_type.get(a["alert_type"], 0) + 1
@@ -186,12 +202,12 @@ def create_app(engine=None, users=None):
     @app.route("/api/endpoints")
     @login_required
     def api_endpoints():
-        return jsonify(endpoints=hub.summary())
+        return jsonify(endpoints=visible(hub.summary()))
 
     @app.route("/api/endpoint/<host>")
     @login_required
     def api_endpoint(host):
-        data = hub.detail(host)
+        data = hub.detail(host) if can_see(host) else None
         if not data:
             return jsonify(error="unknown endpoint"), 404
         return jsonify(data)
@@ -199,15 +215,16 @@ def create_app(engine=None, users=None):
     @app.route("/api/alerts")
     @login_required
     def api_alerts():
-        return jsonify(alerts=engine.db.recent_alerts(500))
+        return jsonify(alerts=engine.db.recent_alerts(500, scope()))
 
     @app.route("/api/events")
     @login_required
     def api_events():
+        only = scope()
         return jsonify(events=engine.db.recent_events(
-                           400, request.args.get("group", ""), request.args.get("q", "")[:100]),
-                       by_type=engine.db.event_counts("event_type"),
-                       by_endpoint=engine.db.event_counts("endpoint"))
+                           400, request.args.get("group", ""), request.args.get("q", "")[:100], only),
+                       by_type=engine.db.event_counts("event_type", only),
+                       by_endpoint=engine.db.event_counts("endpoint", only))
 
     @app.route("/api/alerts/<int:alert_id>/status", methods=["POST"])
     @admin_required
@@ -234,6 +251,8 @@ def create_app(engine=None, users=None):
     @app.route("/api/investigate/<int:pid>")
     @login_required
     def api_investigate(pid):
+        if not can_see(HOSTNAME):  # investigate looks at processes of this laptop
+            return jsonify(error="not allowed"), 403
         info = response.investigate(pid)
         return jsonify(info or {"error": "process has ended"})
 
@@ -243,7 +262,7 @@ def create_app(engine=None, users=None):
         if table not in ("alerts", "events"):
             abort(404)
         path = os.path.join(tempfile.gettempdir(), f"sentinelos_{table}.csv")
-        engine.db.export_csv(path, table)
+        engine.db.export_csv(path, table, scope())
         return send_file(path, as_attachment=True,
                          download_name=f"sentinelos_{table}_{time.strftime('%Y%m%d_%H%M')}.csv")
 
