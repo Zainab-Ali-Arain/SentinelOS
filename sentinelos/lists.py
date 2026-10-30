@@ -35,11 +35,16 @@ def _load(path, default):
         return default
 
 
+# Used when iocs.json is missing (e.g. the agent .exe was copied on its own)
+DEFAULT_IOCS = {"hashes": [], "names": ["mimikatz.exe", "nc.exe", "ncat.exe", "psexec.exe"],
+                "ips": ["127.0.0.66"]}
+
+
 class IocList:
     """Known-bad hashes, process names and IPs (Indicators of Compromise)."""
 
     def __init__(self, path=config.IOC_FILE):
-        data = _load(path, {})
+        data = _load(path, DEFAULT_IOCS)
         self.hashes = {h.lower() for h in data.get("hashes", [])}
         self.names = {n.lower() for n in data.get("names", [])}
         self.ips = set(data.get("ips", []))

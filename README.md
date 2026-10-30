@@ -71,18 +71,27 @@ protected system processes. Without it the EDR still works and skips them.
 
 ## Monitoring group members' laptops (with their permission)
 
-Only monitor computers whose owner has agreed to it.
+Only monitor computers whose owner has agreed to it. Group members do **not**
+need the whole project – only the small **agent**. The agent can only send
+data to the dashboard; it gives nobody access to their laptop, and having it
+does not give them access to your dashboard (that needs a login).
 
-1. All laptops on the **same Wi-Fi**, the project on each one, and the same
-   `AGENT_TOKEN` in `sentinelos/config.py` everywhere (change the default!).
-2. On **your** laptop: `python main.py`. The terminal prints
-   `Agents connect with: python main.py --agent <your-ip>`. If Windows Firewall
-   asks, allow Python on **Private networks**.
-3. On **each group member's** laptop:
+1. Set your own secret in `sentinelos/config.py` (`AGENT_TOKEN = "..."`) – it is
+   built into the agent package.
+2. Build the agent package on your laptop – choose one:
    ```
-   python main.py --agent <your-ip> --name "Ali-Laptop"
+   python build_agent.py          # dist/SentinelOS-Agent.zip  (they need Python)
+   pip install pyinstaller
+   python build_agent.py --exe    # dist/SentinelOS-Agent.exe  (no Python needed)
    ```
-4. Their laptop appears on the **Endpoints** page within a few seconds.
+3. Send them the zip, or the `.exe` + `iocs.json` + `README.txt` from `dist/`.
+4. All laptops on the **same Wi-Fi / hotspot**. On **your** laptop run
+   `python main.py`; the terminal prints your IP. If Windows Firewall asks,
+   allow Python on **Private networks**.
+5. On **their** laptop: double-click `SentinelOS-Agent.exe` (or
+   `pip install -r requirements.txt` then `python agent.py`), type your IP and
+   a name such as `Ali-Laptop`.
+6. Their laptop appears on the **Endpoints** page within a few seconds.
    Remote terminate is disabled on purpose – responses happen on that laptop.
 
 ## Safe demo

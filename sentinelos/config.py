@@ -1,8 +1,13 @@
 """Central settings for SentinelOS. Change values here to tune detection."""
 import os
+import sys
 import tempfile
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if getattr(sys, "frozen", False):
+    # Running as SentinelOS-Agent.exe: keep data next to the .exe
+    BASE_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Folders used by the EDR
 WATCH_DIR = os.path.join(BASE_DIR, "test_zone")        # monitored directory
