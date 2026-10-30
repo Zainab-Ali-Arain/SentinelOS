@@ -7,13 +7,16 @@ import sqlite3
 import logging
 import datetime
 import threading
+from logging.handlers import RotatingFileHandler
 
 from . import config
 
 os.makedirs(config.DATA_DIR, exist_ok=True)
+# The log file rolls over at LOG_MAX_MB so it can never fill the disk
 logging.basicConfig(
-    filename=config.LOG_PATH, level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s")
+    level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s",
+    handlers=[RotatingFileHandler(config.LOG_PATH, maxBytes=config.LOG_MAX_MB * 1024 * 1024,
+                                  backupCount=config.LOG_BACKUPS, encoding="utf-8")])
 log = logging.getLogger("sentinelos")
 
 # Name shown on the dashboard; set SENTINEL_NAME (or --name) to choose your own
@@ -49,6 +52,18 @@ class Database:
             if column not in cols:
                 self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT DEFAULT ''")
         self.conn.commit()
+        self.cleanup()
+
+    def cleanup(self, days=config.EVENT_RETENTION_DAYS):
+        """Delete activity-log events older than `days` so the database stays small.
+        Alerts are kept. Returns how many events were deleted."""
+        cutoff = (datetime.datetime.now() - datetime.timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            deleted = self.conn.execute("DELETE FROM events WHERE timestamp < ?", (cutoff,)).rowcount
+            self.conn.commit()
+            if deleted:
+                self.conn.execute("VACUUM")  # give the freed space back to the disk
+        return deleted
 
     def _write(self, sql, params):
         with self.lock:
@@ -85,15 +100,23 @@ class Database:
                     (status, response, alert_id))
         log.info("ALERT_RESPONSE | alert=%s | %s | %s", alert_id, status, response)
 
-    def recent_alerts(self, limit=200):
-        return self._read("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))
+    def recent_alerts(self, limit=200, endpoint=None):
+        """Newest alerts; `endpoint` limits them to one laptop (None = all)."""
+        if endpoint is None:
+            return self._read("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))
+        return self._read("SELECT * FROM alerts WHERE endpoint = ? ORDER BY id DESC LIMIT ?",
+                          (endpoint, limit))
 
     EVENT_GROUPS = {"process": "PROCESS_%", "file": "FILE_%", "login": "LOGIN_%",
                     "response": "RESPONSE_%", "network": "%CONNECTION%"}
 
-    def recent_events(self, limit=300, group="", search=""):
-        """Newest events, optionally only one group (e.g. "process") or matching text."""
+    def recent_events(self, limit=300, group="", search="", endpoint=None):
+        """Newest events, optionally only one group (e.g. "process"), matching text
+        or one laptop (`endpoint`, None = all)."""
         sql, params = "SELECT * FROM events WHERE 1=1", []
+        if endpoint is not None:
+            sql += " AND endpoint = ?"
+            params.append(endpoint)
         if group in self.EVENT_GROUPS:
             sql += " AND event_type LIKE ?"
             params.append(self.EVENT_GROUPS[group])
@@ -102,20 +125,24 @@ class Database:
             params.append(f"%{search}%")
         return self._read(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
 
-    def event_counts(self, column):
+    def event_counts(self, column, endpoint=None):
         """How many events per event_type or per endpoint (for the charts)."""
         if column not in ("event_type", "endpoint"):
             raise ValueError(column)
+        where, params = ("WHERE endpoint = ?", (endpoint,)) if endpoint is not None else ("", ())
         return {r["k"]: r["n"] for r in self._read(
-            f"SELECT {column} AS k, COUNT(*) AS n FROM events GROUP BY {column}")}
+            f"SELECT {column} AS k, COUNT(*) AS n FROM events {where} GROUP BY {column}", params)}
 
     def get_alert(self, alert_id):
         rows = self._read("SELECT * FROM alerts WHERE id = ?", (alert_id,))
         return rows[0] if rows else None
 
-    def export_csv(self, path, table="alerts"):
-        """Write every row of `table` to a CSV file. Returns the row count."""
-        rows = self._read(f"SELECT * FROM {table} ORDER BY id")
+    def export_csv(self, path, table="alerts", endpoint=None):
+        """Write every row of `table` (or only one laptop's) to a CSV file. Returns the row count."""
+        if endpoint is None:
+            rows = self._read(f"SELECT * FROM {table} ORDER BY id")
+        else:
+            rows = self._read(f"SELECT * FROM {table} WHERE endpoint = ? ORDER BY id", (endpoint,))
         with open(path, "w", newline="", encoding="utf-8") as f:
             if rows:
                 writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))

@@ -96,3 +96,8 @@ AGENT_INTERVAL_SEC = 5
 ENDPOINT_OFFLINE_SEC = 30  # no report for this long = endpoint offline
 LOGIN_MAX_FAILS = 5        # failed logins before a short lockout
 LOGIN_LOCK_SEC = 60
+
+# ---- Disk usage limits ----
+EVENT_RETENTION_DAYS = 7   # activity-log events older than this are deleted (alerts are kept)
+LOG_MAX_MB = 5             # sentinel.log rolls over at this size
+LOG_BACKUPS = 2            # old log files kept (sentinel.log.1, .2)

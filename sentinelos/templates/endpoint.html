@@ -9,7 +9,7 @@
 
 <div class="grid kpis">
   <div class="card kpi"><div class="label">CPU</div><div class="value" id="k-cpu">-</div><div class="hint" id="k-cores"></div></div>
-  <div class="card kpi" style="--kpi-color:#38bdf8"><div class="label">Memory</div><div class="value" id="k-ram">-</div><div class="hint" id="k-ramt"></div></div>
+  <div class="card kpi" style="--kpi-color:var(--accent-2)"><div class="label">Memory</div><div class="value" id="k-ram">-</div><div class="hint" id="k-ramt"></div></div>
   <div class="card kpi" style="--kpi-color:var(--low)"><div class="label">Processes</div><div class="value" id="k-proc">-</div><div class="hint">running now</div></div>
   <div class="card kpi" style="--kpi-color:var(--high)"><div class="label">High-risk</div><div class="value" id="k-high">-</div><div class="hint">processes</div></div>
   <div class="card kpi" style="--kpi-color:var(--medium)"><div class="label">Connections</div><div class="value" id="k-net">-</div><div class="hint">active</div></div>
@@ -133,8 +133,8 @@ poll(async () => {
   document.getElementById("k-high").textContent = d.risk_counts.HIGH + d.risk_counts.CRITICAL;
   document.getElementById("k-net").textContent = d.connections.length;
   lineChart(document.getElementById("c-usage"), [
-    { name: "CPU", color: "#4f8cff", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
-    { name: "Memory", color: "#22c55e", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
+    { name: "CPU", color: "#8b5a2b", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
+    { name: "Memory", color: "#c08552", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
   renderProcs();
   renderTree();
   document.getElementById("net").innerHTML = d.connections.map(c => `
