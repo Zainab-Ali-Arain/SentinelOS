@@ -133,8 +133,8 @@ poll(async () => {
   document.getElementById("k-high").textContent = d.risk_counts.HIGH + d.risk_counts.CRITICAL;
   document.getElementById("k-net").textContent = d.connections.length;
   lineChart(document.getElementById("c-usage"), [
-    { name: "CPU", color: "#8b5a2b", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
-    { name: "Memory", color: "#c08552", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
+    { name: "CPU", color: "#4F7A8A", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
+    { name: "Memory", color: "#A0611F", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
   renderProcs();
   renderTree();
   document.getElementById("net").innerHTML = d.connections.map(c => `

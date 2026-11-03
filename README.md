@@ -12,8 +12,8 @@ pages**.
 
 - **Login** with hashed passwords, roles (**admin** / **viewer**), lockout after 5 wrong tries
 - **Per-laptop viewers:** admin sees every laptop; each viewer sees only the laptop linked to their account
-- **4 dashboards:** Overview (graphs), Endpoints, Alerts, Activity Log (+ Users page for admins)
-- **Live graphs:** CPU and memory per laptop, risk levels, alerts by type and by laptop
+- **4 dashboards:** Overview (Task-Manager-style performance view), Endpoints, Alerts, Activity Log (+ Users page for admins)
+- **Live performance graphs (like Windows Task Manager):** click CPU, Memory, Disk or a network adapter to see its 60-second graph and details; pick any laptop from the drop-down. Risk levels and alert charts are in the same list
 - **Multi-endpoint:** agents on group members' laptops report to one dashboard
 - **Process monitoring:** every running process with PID, parent, user, CPU, memory, threads, path
 - **Process tree:** parent → child view; flags Office apps that start a shell
@@ -24,7 +24,7 @@ pages**.
 - **Rule-based risk scoring** with **MITRE ATT&CK** mapping
 - **Safe responses:** terminate (admin only, confirmed), mark alerts reviewed/resolved/false positive
 - **SQLite logging** + CSV export; old activity events are deleted after 7 days and the log file rolls over at 5 MB, so the disk never fills up
-- **17 unit tests** (detection rules + login/API security)
+- **31 unit tests** (detection rules, login/API security, performance data)
 
 ## Setup
 
@@ -62,7 +62,7 @@ protected system processes. Without it the EDR still works and skips them.
 
 | Page | What it shows |
 |---|---|
-| **Overview** | KPIs, then one graph at a time chosen from a tab bar (CPU, Memory, Risk levels, Alerts by type, Alerts by laptop), latest alerts |
+| **Overview** | KPIs, then a Task-Manager-style panel: list of resources on the left (CPU, Memory, Disk, each network adapter, Risk levels, Alerts), details of the one you click on the right, latest alerts |
 | **Endpoints** | One card per laptop (online/offline, threat level, CPU, memory). Click a card for all its running processes (search, sort, filter by risk), process tree, network connections and file events |
 | **Alerts** | Every alert with severity, reasons and MITRE ATT&CK IDs; filters; click for details and to mark reviewed/resolved/false positive; CSV export |
 | **Activity Log** | Process starts/stops, file changes, logins, responses; charts; CSV export |
@@ -95,6 +95,8 @@ does not give them access to your dashboard (that needs a login).
    `pip install -r requirements.txt` then `python agent.py`), type your IP and
    a name such as `Ali-Laptop`.
 6. Their laptop appears on the **Endpoints** page within a few seconds.
+   Disk and network details on the Overview need the **current** agent: if a
+   laptop still runs an older agent, rebuild the package (step 2) and send it again.
    Remote terminate is disabled on purpose – responses happen on that laptop.
 
 ## Safe demo
@@ -137,7 +139,7 @@ python -m unittest            # run the tests
 | `sentinelos/engine.py` | 7. Alert manager + scan workflow |
 | `sentinelos/response.py` | 8. Investigate / terminate / quarantine |
 | `sentinelos/database.py` | 9. SQLite + log file (`data/`) |
-| `sentinelos/webapp.py`, `templates/`, `static/` | 10. Web dashboard |
+| `sentinelos/webapp.py`, `templates/`, `static/` | 10. Web dashboard (`static/perf.js` = Overview performance view) |
 | `sentinelos/auth.py` | Login accounts (hashed passwords, roles, lockout) |
 | `sentinelos/remote.py` | Agent → server (multi-endpoint) |
 | `sentinelos/lists.py` | IoC blocklist + trusted list |

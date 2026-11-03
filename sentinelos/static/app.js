@@ -3,7 +3,7 @@ const CSRF = document.querySelector('meta[name="csrf"]')?.content || "";
 const ROLE = document.querySelector('meta[name="role"]')?.content || "viewer";
 const SERVER_HOST = document.querySelector('meta[name="host"]')?.content || "";
 const RISK_COLORS = { LOW: "#3f8f4f", MEDIUM: "#c7801a", HIGH: "#c0392b", CRITICAL: "#7d3c98" };
-const SERIES_COLORS = ["#8b5a2b", "#c08552", "#3f8f4f", "#5a7d9a", "#b5651d", "#7d3c98"];
+const SERIES_COLORS = ["#4F7A8A", "#A0611F", "#6F8559", "#8A6A8F", "#C9A064", "#6B5E4E"];
 const SVGNS = "http://www.w3.org/2000/svg";
 
 async function api(url, options = {}) {
@@ -50,7 +50,7 @@ function lineChart(container, series, { max = 100, height = 220, unit = "%" } = 
   const svg = svgEl("svg", { width, height, viewBox: `0 0 ${width} ${height}` }, container);
   for (let i = 0; i <= 4; i++) {
     const v = max * i / 4;
-    svgEl("line", { x1: pad.l, x2: width - pad.r, y1: y(v), y2: y(v), stroke: "#ede3d7" }, svg);
+    svgEl("line", { x1: pad.l, x2: width - pad.r, y1: y(v), y2: y(v), stroke: "#DCCBA6" }, svg);
     svgEl("text", { x: pad.l - 6, y: y(v) + 4, "text-anchor": "end" }, svg).textContent = Math.round(v) + unit;
   }
   svgEl("text", { x: pad.l, y: height - 6 }, svg).textContent = timeOf(t0);
@@ -79,7 +79,7 @@ function donutChart(container, items, centerLabel = "") {
   const wrap = document.createElement("div");
   wrap.className = "donut-wrap";
   const svg = svgEl("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}` }, wrap);
-  svgEl("circle", { cx: size / 2, cy: size / 2, r, fill: "none", stroke: "#f4ece3", "stroke-width": stroke }, svg);
+  svgEl("circle", { cx: size / 2, cy: size / 2, r, fill: "none", stroke: "#EDDFC3", "stroke-width": stroke }, svg);
   let offset = 0;
   items.forEach(it => {
     if (!it.value) return;
@@ -91,13 +91,13 @@ function donutChart(container, items, centerLabel = "") {
     }, svg);
     offset += len;
   });
-  const t1 = svgEl("text", { x: size / 2, y: size / 2 + 2, "text-anchor": "middle", style: "font-size:24px;font-weight:700;fill:#3b2a1e" }, svg);
+  const t1 = svgEl("text", { x: size / 2, y: size / 2 + 2, "text-anchor": "middle", style: "font-size:24px;font-weight:700;fill:#33240F" }, svg);
   t1.textContent = total;
   const t2 = svgEl("text", { x: size / 2, y: size / 2 + 20, "text-anchor": "middle" }, svg);
   t2.textContent = centerLabel;
   const legend = document.createElement("div");
   legend.innerHTML = items.map(it =>
-    `<div class="legend" style="margin:6px 0"><span><i style="background:${it.color}"></i>${esc(it.label)}: <b style="color:#3b2a1e">${it.value}</b></span></div>`).join("");
+    `<div class="legend" style="margin:6px 0"><span><i style="background:${it.color}"></i>${esc(it.label)}: <b style="color:#33240F">${it.value}</b></span></div>`).join("");
   wrap.appendChild(legend);
   container.appendChild(wrap);
 }
@@ -113,8 +113,8 @@ function barList(container, items) {
 }
 
 // Tiny line without axes, for endpoint cards.
-function sparkline(container, values, color) {
-  const w = Math.max(container.clientWidth, 120), h = 40;
+function sparkline(container, values, color, height = 40) {
+  const w = Math.max(container.clientWidth, 120), h = height;
   container.innerHTML = "";
   if (values.length < 2) return;
   const svg = svgEl("svg", { width: w, height: h }, container);

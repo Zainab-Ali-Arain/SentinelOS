@@ -22,6 +22,10 @@ poll(async () => {
   const d = await api("/api/endpoints");
   if (!d) return;
   const box = document.getElementById("eps");
+  // 1 laptop = full width, 2 = two side by side, 3 = three; 4 = 2x2, then up to 3 (or 4) per row
+  const n = d.endpoints.length;
+  const cols = n <= 3 ? Math.max(n, 1) : n === 4 ? 2 : n <= 9 ? 3 : 4;
+  box.style.setProperty("--cols", cols);
   if (!d.endpoints.length) { box.innerHTML = `<div class="card empty">${ROLE === "admin" ? "Waiting for the first scan..."
     : "Your laptop is not reporting yet. Start the agent with the laptop name the admin gave you."}</div>`; return; }
   box.innerHTML = d.endpoints.map((e, i) => `
@@ -41,7 +45,7 @@ poll(async () => {
     </a>`).join("");
   box.querySelectorAll(".spark").forEach(el => {
     const e = d.endpoints[el.dataset.i];
-    sparkline(el, e.history.map(h => h.cpu), seriesColor(+el.dataset.i));
+    sparkline(el, e.history.map(h => h.cpu), seriesColor(+el.dataset.i), cols === 1 ? 140 : cols === 2 ? 90 : 50);
   });
 });
 </script>
