@@ -45,7 +45,6 @@ class ProcessMonitor:
                         "cpu_percent": round(p.cpu_percent(None), 1),
                         "memory_mb": round(p.memory_info().rss / (1024 ** 2), 1),
                         "threads": p.num_threads(),
-                        "handles": _safe(getattr(p, "num_handles", int), 0),  # Windows only; 0 elsewhere
                         "start_time": datetime.datetime.fromtimestamp(
                             p.create_time()).strftime("%Y-%m-%d %H:%M:%S"),
                         "path": _safe(p.exe, ""),

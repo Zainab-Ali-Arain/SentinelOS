@@ -31,46 +31,10 @@ def build_report(state, alerts):
                                "memory_mb", "threads", "score", "level", "reasons",
                                "notes", "mitre", "path", "username", "start_time")}
             for p in state["processes"]],
-        "totals": {"threads": sum(p.get("threads", 0) for p in state["processes"]),
-                   "handles": sum(p.get("handles", 0) for p in state["processes"])},
         "connections": state["connections"][:300],
         "file_events": state["file_events"][-50:],
         "alerts": alerts,
     }
-
-
-def perf_rates(prev, cur):
-    """Disk and network speeds from two consecutive `system` blocks.
-
-    The agent only sends cumulative counters; the difference between two
-    reports divided by the time between them is the speed. Returns {} when
-    there is nothing to compare (first report, old agent, long gap, restart).
-    """
-    try:
-        dt = float(cur["sampled_at"]) - float(prev["sampled_at"])
-    except (KeyError, TypeError, ValueError):
-        return {}
-    if not 0 < dt <= 120:
-        return {}
-
-    def speed(new, old):
-        return round(max(0.0, (new - old) / dt), 1)
-
-    out = {}
-    d0, d1 = prev.get("disk_io"), cur.get("disk_io")
-    if d0 and d1:
-        out["disk_read"] = speed(d1["read_bytes"], d0["read_bytes"])
-        out["disk_write"] = speed(d1["write_bytes"], d0["write_bytes"])
-        busy = (d1["busy_ms"] - d0["busy_ms"]) / (dt * 1000) * 100
-        out["disk_active"] = round(min(100.0, max(0.0, busy)), 1)
-    n0, n1 = prev.get("net") or {}, cur.get("net") or {}
-    out["net"] = {name: [speed(c["sent"], n0[name]["sent"]), speed(c["recv"], n0[name]["recv"])]
-                  for name, c in n1.items() if name in n0}
-    return out
-
-
-def _number(value):
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 class Hub:
@@ -91,20 +55,14 @@ class Hub:
         point = {"t": time.time(), "cpu": report["system"]["cpu_percent"],
                  "ram": report["system"]["ram_used_percent"],
                  "procs": len(report["processes"])}
-        totals = report.get("totals") if isinstance(report.get("totals"), dict) else {}
-        threads = sum(int(p.get("threads", 0)) for p in report["processes"])
-        handles = _number(totals.get("handles"))
         with self.lock:
             old = self.endpoints.get(host)
-            if old:
-                point.update(perf_rates(old["system"], report["system"]))
             if old is None:
                 self.db.add_event("ENDPOINT_CONNECTED", details=f"{host} ({ip})", endpoint=host)
             history = old["history"] if old else deque(maxlen=HISTORY_POINTS)
             history.append(point)
             self.endpoints[host] = {**report, "ip": ip, "last_seen": time.time(),
-                                    "local": local, "history": history,
-                                    "threads": threads, "handles": handles or None}
+                                    "local": local, "history": history}
 
     def _view(self, e, full):
         view = {k: v for k, v in e.items() if full or k not in
