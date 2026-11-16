@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}War Room{% endblock %}
+{% block body_class %}wr-page{% endblock %}
+{% block page %}
+<div class="wr" id="wr">
+  <div class="view3d" id="globe3d"></div>
+
+  <div class="wr-top">
+    <div class="wr-btns"><a class="icon-btn" href="/" title="Back to the dashboard">{{ icon("back") }}</a></div>
+    <div class="wr-title" id="wr-title"><div class="logo">{{ icon("shield") }}</div>
+      <div><b>SENTINELOS // WAR ROOM</b><small>LIVE THREAT COMMAND CENTRE</small></div></div>
+    <span class="live">Live</span><span id="wr-threat"></span>
+    <div class="wr-clock"><span id="clock">--:--:--</span><small id="date"></small></div>
+    <div class="wr-btns">
+      <button class="icon-btn" type="button" onclick="replay()" title="Replay the latest alerts on the globe">{{ icon("replay") }}</button>
+      <button class="icon-btn" type="button" onclick="openPalette()" title="Command palette (Ctrl+K)">{{ icon("search") }}</button>
+      <button class="icon-btn" id="theme-btn" type="button" onclick="openThemePicker(this)" title="Theme (t)">{{ icon("palette") }}</button>
+      <button class="icon-btn" type="button" data-sound onclick="setSound(!soundOn())" title="Alert sound on/off">{{ icon("sound") }}</button>
+      <button class="icon-btn" type="button" onclick="toggleFullscreen()" title="Full screen (f)">{{ icon("expand") }}</button>
+    </div>
+  </div>
+
+  <div class="hud-panel wr-left"><h2>Endpoints</h2><div id="wr-eps"></div></div>
+  <div class="hud-panel wr-right"><h2>Live feed</h2><div class="feed" id="feed"></div></div>
+  <div class="hud-panel wr-radar"><h2>Radar</h2><div class="radar" id="radar"></div>
+    <div class="wr-legend"><span>angle = place on globe</span><span>centre = busy CPU</span></div></div>
+  <div class="hud-panel wr-stats">
+    <div class="s"><b id="s-online">0</b><span>Online</span></div>
+    <div class="s"><b id="s-proc">0</b><span>Processes</span></div>
+    <div class="s"><b id="s-high" style="color:var(--high)">0</b><span>High-risk</span></div>
+    <div class="s"><b id="s-alerts">0</b><span>Alerts</span></div>
+    <div class="s"><b id="s-new" style="color:var(--accent)">0</b><span>Unreviewed</span></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+/* ---------------- clock ---------------- */
+const tick = () => {
+  const d = new Date();
+  document.getElementById("clock").textContent = d.toLocaleTimeString([], { hour12: false });
+  document.getElementById("date").textContent = d.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
+};
+tick(); setInterval(tick, 1000);
+
+/* ---------------- the globe ---------------- */
+const R = 230;
+let last = null, selected = null;
+const rnd = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return ((h >>> 0) % 10000) / 10000; };
+const globe = new Scene3D(document.getElementById("globe3d"), {
+  sphere: R, distance: 860, pitch: -0.22, yaw: 0.2, spin: 0.0011, fit: 1.45,
+  hint: "Drag to rotate · scroll to zoom · click a laptop",
+  tooltip: n => {
+    const d = n.data || {};
+    if (d.core) return `<b>SentinelOS core</b><span class="muted">The server every laptop reports to</span>`;
+    if (d.ep) { const e = d.ep; return `<b>${esc(e.hostname)}</b>${e.online ? "Online" : "Offline"} · ${esc(e.ip)}
+      <div style="margin:6px 0">${e.online ? badge(e.threat_level) : '<span class="badge b-OK">OFFLINE</span>'}</div>
+      CPU <b>${e.system.cpu_percent}%</b> · RAM <b>${e.system.ram_used_percent}%</b><br>${e.process_count} processes
+      <div class="muted small" style="margin-top:4px">${selected === e.hostname ? "Click again to open" : "Click to focus"}</div>`; }
+    if (d.level) return `${badge(d.level)}<div style="margin-top:4px">${d.count} ${d.level.toLowerCase()}-risk processes on <b style="display:inline">${esc(d.host)}</b></div>`;
+    return "";
+  },
+  onClick: n => { if (n.data?.ep) select(n.data.ep.hostname); },
+});
+// fixed "lat/lon" for each laptop so it keeps its place on the globe
+const place = (host, i, n) => {
+  const lon = i / Math.max(n, 1) * Math.PI * 2 + 0.6, lat = (i % 2 ? .5 : -.38) + (rnd(host) - .5) * .3;
+  return { lat, lon, x: Math.cos(lat) * Math.cos(lon) * (R + 8), y: Math.sin(lat) * (R + 8), z: Math.cos(lat) * Math.sin(lon) * (R + 8) };
+};
+const shell = Scene3D.fibonacci(320, R).map((p, i) => ({ id: "g" + i, ...p, r: 1.3, color: "var(--accent)", alpha: .32, glow: 1.8, noHover: true }));
+
+function drawGlobe(d) {
+  const eps = d.endpoints, nodes = shell.slice(), edges = [];
+  nodes.push({ id: "core", x: 0, y: 0, z: 0, r: 20, color: "var(--accent)", glow: 5, label: "SENTINELOS CORE", showLabel: true,
+    labelSize: 11, labelWeight: 800, data: { core: true } });
+  eps.forEach((e, i) => {
+    const p = place(e.hostname, i, eps.length), id = `ep:${e.hostname}`;
+    const color = e.online ? RISK_COLORS[e.threat_level] : "var(--muted)";
+    nodes.push({ id, x: p.x, y: p.y, z: p.z, r: selected === e.hostname ? 13 : 10, color, glow: 4, showLabel: true,
+      label: e.hostname, sub: e.online ? `${e.threat_level} · CPU ${Math.round(e.system.cpu_percent)}%` : "OFFLINE",
+      pulse: e.online && ["HIGH", "CRITICAL"].includes(e.threat_level), alpha: e.online ? 1 : .55, data: { ep: e } });
+    edges.push({ a: "core", b: id, color: e.online ? "var(--accent)" : "var(--muted)", flow: e.online, alpha: e.online ? .55 : .2, width: 1.4, speed: 1.3 });
+    if (eps.length > 1) {
+      const nxt = eps[(i + 1) % eps.length];
+      if (nxt !== e) edges.push({ a: id, b: `ep:${nxt.hostname}`, color: "var(--accent-2)", curve: 90, alpha: .35, width: 1 });
+    }
+    if (!e.online) return;
+    const rc = e.risk_counts, cap = 48;
+    const crit = Math.min(rc.CRITICAL, 12), high = Math.min(rc.HIGH, 12), room = cap - crit - high;
+    const med = Math.min(rc.MEDIUM, Math.max(rc.MEDIUM ? 1 : 0, Math.round(room * rc.MEDIUM / ((rc.MEDIUM + rc.LOW) || 1))));
+    Object.entries({ CRITICAL: crit, HIGH: high, MEDIUM: med, LOW: Math.min(rc.LOW, room - med) }).forEach(([lvl, n]) => {
+      for (let k = 0; k < n; k++) {
+        const key = `${e.hostname}:${lvl}:${k}`, u = rnd(key), v = rnd(key + "v");
+        nodes.push({ id: `p:${key}`, r: lvl === "LOW" ? 1.9 : 3.2, color: RISK_COLORS[lvl], alpha: lvl === "LOW" ? .55 : 1,
+          pulse: lvl === "HIGH" || lvl === "CRITICAL", phase: u, glow: lvl === "LOW" ? 2 : 3.4,
+          orbit: { parent: id, radius: 20 + u * 32, speed: (0.3 + v * 0.6) * (k % 2 ? 1 : -1), phase: u * 6.28, tilt: (v - .5) * 2.4 },
+          data: { host: e.hostname, level: lvl, count: rc[lvl] } });
+      }
+    });
+  });
+  globe.set(nodes, edges);
+}
+
+function select(host) {
+  if (selected === host) { location.href = `/endpoint/${encodeURIComponent(host)}`; return; }
+  selected = host;
+  globe.focus(`ep:${host}`);
+  if (last) { drawGlobe(last); drawList(last); }
+}
+
+/* ---------------- side panels ---------------- */
+function drawList(d) {
+  document.getElementById("wr-eps").innerHTML = d.endpoints.map(e => `
+    <div class="wr-ep ${selected === e.hostname ? "sel" : ""}" onclick="select(${esc(JSON.stringify(e.hostname))})">
+      <span class="dot ${e.online ? "on" : "off"}"></span><span class="nm">${esc(e.hostname)}</span>
+      ${e.online ? badge(e.threat_level) : '<span class="badge b-OK">OFF</span>'}
+      <div class="bar"><div style="width:${e.system.cpu_percent}%;background:${e.online ? RISK_COLORS[e.threat_level] : "var(--muted)"}"></div></div>
+    </div>`).join("") || '<div class="muted small">No laptop has reported yet.</div>';
+  const radar = document.getElementById("radar");
+  radar.querySelectorAll(".blip").forEach(b => b.remove());
+  d.endpoints.forEach((e, i) => {
+    const p = place(e.hostname, i, d.endpoints.length), dist = 68 - Math.min(e.system.cpu_percent, 100) / 100 * 55;
+    const b = document.createElement("span");
+    b.className = "blip";
+    b.title = `${e.hostname} · CPU ${e.system.cpu_percent}%`;
+    b.style.left = `${75 + Math.cos(p.lon) * dist}px`; b.style.top = `${75 + Math.sin(p.lon) * dist}px`;
+    b.style.color = e.online ? cssColor(RISK_COLORS[e.threat_level]) : cssColor("var(--muted)");
+    radar.appendChild(b);
+  });
+}
+
+/* ---------------- live feed ---------------- */
+const feed = document.getElementById("feed");
+const seenEvents = new Set();
+const NICE = { PROCESS_START: "app opened", PROCESS_STOP: "app closed", FILE_CREATED: "file created", FILE_MODIFIED: "file modified",
+  FILE_DELETED: "file deleted", FILE_MOVED: "file renamed", LOGIN_SUCCESS: "login", LOGIN_FAILED: "FAILED LOGIN",
+  RESPONSE_TERMINATE: "process terminated", ENDPOINT_CONNECTED: "endpoint connected" };
+function line(ts, html, cls = "") {
+  const div = document.createElement("div");
+  div.className = `ln ${cls}`;
+  div.innerHTML = `<span class="ts">${esc(ts)}</span>${html}`;
+  feed.prepend(div);
+  while (feed.children.length > 90) feed.lastChild.remove();
+}
+async function loadEvents(first) {
+  const d = await api("/api/events?group=&q=");
+  if (!d) return;
+  const fresh = d.events.filter(e => !seenEvents.has(e.id)).slice(0, first ? 30 : 12).reverse();
+  fresh.forEach(e => {
+    seenEvents.add(e.id);
+    line(e.timestamp.slice(11), `<b>${esc(e.endpoint)}</b> ${esc(NICE[e.event_type] || e.event_type)} ${esc(e.process || "")}`,
+      e.severity === "MEDIUM" ? "MEDIUM" : "");
+  });
+  d.events.forEach(e => seenEvents.add(e.id));
+}
+
+/* ---------------- incidents: comet -> impact ---------------- */
+let lastAlert = null, alertCache = [];
+function incident(a, replayed) {
+  const id = `ep:${a.endpoint}`, color = RISK_COLORS[a.severity] || "var(--high)";
+  line(a.timestamp.slice(11), `${replayed ? "REPLAY " : ""}▲ ${esc(a.severity)} ${esc(a.alert_type)} · ${esc(a.process)} on ${esc(a.endpoint)}`, a.severity);
+  globe.strike(id, color, { onImpact: n => {
+    const wr = document.getElementById("wr");
+    if (a.severity !== "MEDIUM") { wr.classList.remove("alarm"); void wr.offsetWidth; wr.classList.add("alarm"); }
+    if (n._p) {
+      const tag = document.createElement("div");
+      tag.className = "impact-tag";
+      tag.style.background = cssColor(color); tag.style.boxShadow = `0 0 24px ${cssColor(color)}`;
+      tag.style.left = `${n._p.sx}px`; tag.style.top = `${n._p.sy}px`;
+      tag.textContent = `${a.severity} · ${a.process}`;
+      wr.appendChild(tag);
+      setTimeout(() => tag.remove(), 2700);
+    }
+  } });
+}
+function replay() {
+  alertCache.filter(a => a.severity !== "MEDIUM").slice(0, 3).reverse()
+    .forEach((a, i) => setTimeout(() => incident(a, true), i * 1300));
+}
+
+/* ---------------- polling ---------------- */
+let firstLoad = true;
+poll(async () => {
+  const [d, al] = await Promise.all([api("/api/overview"), api("/api/alerts")]);
+  if (!d || !al) return;
+  last = d;
+  alertCache = al.alerts;
+  const online = d.endpoints.filter(e => e.online);
+  const worst = worstLevel(online.map(e => e.threat_level));
+  document.getElementById("wr-threat").innerHTML = badge(worst);
+  document.getElementById("wr-title").classList.toggle("glitch", worst === "CRITICAL");
+  countTo(document.getElementById("s-online"), online.length, { suffix: `/${d.endpoints.length}` });
+  countTo(document.getElementById("s-proc"), online.reduce((a, e) => a + e.process_count, 0));
+  countTo(document.getElementById("s-high"), d.risk.HIGH + d.risk.CRITICAL);
+  countTo(document.getElementById("s-alerts"), d.alert_total);
+  countTo(document.getElementById("s-new"), d.new_alerts);
+  drawGlobe(d);
+  drawList(d);
+  const newest = al.alerts.length ? al.alerts[0].id : 0;
+  if (lastAlert !== null) al.alerts.filter(a => a.id > lastAlert).slice(0, 4).reverse().forEach((a, i) => setTimeout(() => incident(a), i * 900));
+  lastAlert = newest;
+  await loadEvents(firstLoad);
+  if (firstLoad) {
+    firstLoad = false;
+    line(new Date().toTimeString().slice(0, 8), `<b>WAR ROOM ONLINE</b> · watching ${d.endpoints.length} endpoint(s)`);
+    setTimeout(replay, 1400);   // show the most recent incidents once, for context
+  }
+}, 3000);
+</script>
+{% endblock %}

@@ -1,39 +1,75 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Overview{% endblock %}
 {% block content %}
 <div class="topbar">
   <div><h1>Security Overview</h1><div class="sub">{{ 'All monitored laptops at a glance' if scope is none else 'Your laptop at a glance' }}</div></div>
-  <div style="display:flex;gap:12px;align-items:center"><span class="live">Live</span><span id="threat"></span></div>
+  <div class="actions"><span class="live">Live</span><span id="threat"></span></div>
 </div>
 
 <div class="grid kpis">
-  <div class="card kpi" style="--kpi-color:var(--accent)"><div class="label">Endpoints online</div><div class="value" id="k-ep">-</div><div class="hint">laptops reporting</div></div>
-  <div class="card kpi" style="--kpi-color:var(--accent-2)"><div class="label">Running processes</div><div class="value" id="k-proc">-</div><div class="hint">across all endpoints</div></div>
-  <div class="card kpi" style="--kpi-color:var(--high)"><div class="label">High / critical now</div><div class="value" id="k-high">-</div><div class="hint">risky processes</div></div>
-  <div class="card kpi" style="--kpi-color:var(--medium)"><div class="label">Total alerts</div><div class="value" id="k-alerts">-</div><div class="hint" id="k-new"></div></div>
-  <div class="card kpi" style="--kpi-color:var(--low)"><div class="label">Avg CPU</div><div class="value" id="k-cpu">-</div><div class="hint">online endpoints</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--accent)"><div class="label">{{ icon("laptop") }}Endpoints online</div><div class="value" id="k-ep">-</div><div class="hint">laptops reporting</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--accent-2)"><div class="label">{{ icon("layers") }}Running processes</div><div class="value" id="k-proc">-</div><div class="hint">across all endpoints</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--high)"><div class="label">{{ icon("target") }}High / critical now</div><div class="value" id="k-high">-</div><div class="hint">risky processes</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--medium)"><div class="label">{{ icon("alert") }}Total alerts</div><div class="value" id="k-alerts">-</div><div class="hint" id="k-new"></div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--low)"><div class="label">{{ icon("cpu") }}Avg CPU</div><div class="value" id="k-cpu">-</div><div class="hint">online endpoints</div></div>
 </div>
 
-<div class="card mb">
+<div class="card mb reveal">
+  <div class="brief"><div class="orb">{{ icon("sparkle") }}</div>
+    <div style="flex:1;min-width:0"><div class="card-head" style="margin-bottom:6px"><h2>Security brief</h2>
+      <span class="muted small">Written automatically from the live data (rule-based)</span></div>
+      <div class="brief-text" id="brief">Reading the latest reports...</div></div></div>
+</div>
+
+<div class="grid cols-2 mb">
+  <div class="card reveal fill">
+    <div class="card-head"><h2>{{ 'Network' if scope is none else 'Your laptop' }} in 3D</h2>
+      <span class="muted small">Dots orbiting a laptop are its processes, coloured by risk. Click a laptop to open it.</span></div>
+    <div class="view3d" id="map3d">
+      <div class="legend3d"><span><i style="background:var(--accent)"></i>Server</span><span><i style="background:var(--low)"></i>Low</span>
+        <span><i style="background:var(--medium)"></i>Medium</span><span><i style="background:var(--high)"></i>High</span><span><i style="background:var(--critical)"></i>Critical</span></div>
+    </div>
+  </div>
+  <div class="card reveal">
+    <h2>Threat level</h2>
+    <div class="gauge">
+      <svg viewBox="0 0 210 116">
+        <path class="g-track" d="M 15 105 A 90 90 0 0 1 195 105"/>
+        <path class="g-val" id="g-val" d="M 15 105 A 90 90 0 0 1 195 105" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+        <g class="g-needle" id="g-needle" style="transform: rotate(-90deg)">
+          <line x1="105" y1="105" x2="105" y2="48" stroke="var(--text)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="105" cy="105" r="7" fill="var(--text)"/></g>
+      </svg>
+      <div class="g-label"><b id="g-level">-</b><span>worst laptop right now</span></div>
+    </div>
+    <h2 style="margin-top:18px">Processes by risk</h2>
+    <div class="stack" id="risk-stack"></div>
+    <div id="risk-legend"></div>
+    <h2 style="margin-top:16px">Laptops</h2>
+    <div class="ep-list" id="ep-list"></div>
+  </div>
+</div>
+
+<div class="card mb reveal">
   <div class="tabs chart-tabs" id="chart-tabs">
-    <button data-chart="cpu" class="active">⚙️ CPU</button>
-    <button data-chart="ram">🧠 Memory</button>
-    <button data-chart="risk">🎯 Risk levels</button>
-    <button data-chart="types">🚨 Alerts by type</button>
-    <button data-chart="eps">💻 Alerts by laptop</button>
+    <button data-chart="cpu" class="active">{{ icon("cpu") }}CPU</button>
+    <button data-chart="ram">{{ icon("memory") }}Memory</button>
+    <button data-chart="risk">{{ icon("pie") }}Risk levels</button>
+    <button data-chart="types">{{ icon("bars") }}Alerts by type</button>
+    <button data-chart="eps">{{ icon("laptop") }}Alerts by laptop</button>
   </div>
   <div class="chart-pane"><h2 id="chart-title"></h2><div id="chart"></div></div>
 </div>
 
-<div class="card">
-  <div class="topbar" style="margin-bottom:8px"><h2 style="margin:0">Latest alerts</h2><a href="/alerts">View all →</a></div>
+<div class="card reveal">
+  <div class="card-head"><h2>Latest alerts</h2><a href="/alerts" class="small">View all →</a></div>
   <div class="table-wrap"><table><thead><tr><th>Time</th><th>Laptop</th><th>Type</th><th>Process</th><th>Severity</th><th>MITRE ATT&amp;CK</th></tr></thead>
   <tbody id="t-alerts"></tbody></table></div>
 </div>
 {% endblock %}
 {% block scripts %}
 <script>
-const LEVELS = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const CHARTS = {
   cpu: "CPU usage per laptop", ram: "Memory usage per laptop", risk: "Process risk levels",
   types: "Alerts by type", eps: "Alerts by laptop",
@@ -41,11 +77,15 @@ const CHARTS = {
 let current = "cpu", last = null;
 try { if (CHARTS[localStorage.getItem("overviewChart")]) current = localStorage.getItem("overviewChart"); } catch (e) {}
 
-function drawChart() {
+function drawChart(changed) {
   document.querySelectorAll("#chart-tabs button").forEach(b => b.classList.toggle("active", b.dataset.chart === current));
   document.getElementById("chart-title").textContent = CHARTS[current];
   if (!last) return;
   const box = document.getElementById("chart"), d = last;
+  if (changed) {   // a new chart type draws itself in again
+    box.innerHTML = ""; delete box.dataset.drawn;
+    box.parentElement.classList.remove("pane-in"); void box.offsetWidth; box.parentElement.classList.add("pane-in");
+  }
   const series = key => d.endpoints.map((e, i) => ({ name: e.hostname, color: seriesColor(i),
     points: e.history.map(h => ({ t: h.t, v: h[key] })) }));
   const bars = (counts, offset) => Object.entries(counts).sort((a, b) => b[1] - a[1])
@@ -57,31 +97,133 @@ function drawChart() {
   if (current === "eps") barList(box, bars(d.by_endpoint, 0));
 }
 document.querySelectorAll("#chart-tabs button").forEach(b => b.addEventListener("click", () => {
+  if (current === b.dataset.chart) return;
   current = b.dataset.chart;
   try { localStorage.setItem("overviewChart", current); } catch (e) {}
-  drawChart();
+  drawChart(true);
 }));
+window.addEventListener("resize", () => drawChart(false));
+
+/* ---------- threat gauge ---------- */
+const GAUGE = { LOW: 22, MEDIUM: 50, HIGH: 78, CRITICAL: 100 };
+function drawGauge(level, risk) {
+  const val = document.getElementById("g-val");
+  val.style.stroke = RISK_COLORS[level];
+  val.setAttribute("stroke-dashoffset", 100 - GAUGE[level]);
+  document.getElementById("g-needle").style.transform = `rotate(${-90 + GAUGE[level] * 1.8}deg)`;
+  const lab = document.getElementById("g-level");
+  lab.textContent = level; lab.style.color = RISK_COLORS[level];
+  const total = LEVELS.reduce((a, l) => a + risk[l], 0) || 1;
+  const stack = document.getElementById("risk-stack");
+  if (!stack.children.length) stack.innerHTML = LEVELS.map(l => `<div style="width:0;background:${RISK_COLORS[l]}" title="${l}"></div>`).join("");
+  requestAnimationFrame(() => [...stack.children].forEach((el, i) => { el.style.width = `${risk[LEVELS[i]] / total * 100}%`; }));
+  const legend = document.getElementById("risk-legend");
+  if (!legend.children.length) legend.innerHTML = LEVELS.map(l =>
+    `<div class="row" style="padding:5px 0"><span><i class="dot" style="background:${RISK_COLORS[l]}"></i>${l}</span><b data-l="${l}" style="color:var(--text)">0</b></div>`).join("");
+  LEVELS.forEach(l => countTo(legend.querySelector(`[data-l="${l}"]`), risk[l]));
+}
+
+/* ---------- 3D network map ---------- */
+// small deterministic "random" numbers so dots keep their orbit between updates
+const rnd = (s) => { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return ((h >>> 0) % 10000) / 10000; };
+const map = new Scene3D(document.getElementById("map3d"), {
+  floorY: -110, floorStep: 58, floorRings: 5, pitch: -0.36, fit: 1.3,
+  tooltip: n => {
+    const d = n.data || {};
+    if (d.hub) return `<b>SentinelOS server</b><span class="muted">Collects reports from ${last ? last.endpoints.length : 0} laptop(s)</span>`;
+    if (d.ep) { const e = d.ep; return `<b>${esc(e.hostname)}</b>${e.online ? "Online" : "Offline"} · ${esc(e.ip)}<br>${esc(e.system.os)}
+      <div style="margin:6px 0">${e.online ? badge(e.threat_level) : '<span class="badge b-OK">OFFLINE</span>'}</div>
+      CPU <b>${e.system.cpu_percent}%</b> · Memory <b>${e.system.ram_used_percent}%</b><br>
+      ${e.process_count} processes · ${e.risk_counts.HIGH + e.risk_counts.CRITICAL} high-risk<div class="muted small" style="margin-top:4px">Click to open</div>`; }
+    return `${badge(d.level)} <b style="display:inline">process</b><span class="muted">on ${esc(d.host)}</span><br>${d.count} ${d.level.toLowerCase()}-risk processes on this laptop
+      <div class="muted small" style="margin-top:4px">Click to see them</div>`;
+  },
+  onClick: n => { if (n.data?.host) location.href = `/endpoint/${encodeURIComponent(n.data.host)}`; },
+});
+
+function drawMap(d) {
+  const eps = d.endpoints, N = eps.length, online = eps.filter(e => e.online).length;
+  const R = N <= 1 ? 185 : N <= 3 ? 215 : 245;
+  const nodes = [{ id: "hub", x: 0, y: 0, z: 0, r: 15, color: "var(--accent)", label: "SentinelOS server",
+    sub: `${online} / ${N} reporting`, showLabel: true, glow: 4, data: { hub: true } }];
+  const edges = [];
+  eps.forEach((e, i) => {
+    const a = i / Math.max(N, 1) * Math.PI * 2 + 0.4, id = `ep:${e.hostname}`;
+    const color = e.online ? RISK_COLORS[e.threat_level] : "var(--muted)";
+    nodes.push({ id, x: Math.cos(a) * R, y: (i % 2 ? 22 : -8), z: Math.sin(a) * R, r: 11, color, label: e.hostname,
+      sub: e.online ? `${e.process_count} processes` : "offline", showLabel: true, glow: 3.6,
+      pulse: e.online && ["HIGH", "CRITICAL"].includes(e.threat_level), alpha: e.online ? 1 : .6,
+      data: { host: e.hostname, ep: e } });
+    edges.push({ a: "hub", b: id, color: e.online ? "var(--accent)" : "var(--muted)", width: 1.6, flow: e.online, alpha: e.online ? .6 : .25 });
+    if (!e.online) return;
+    // processes as orbiting dots: every risky one, plus a sample of the rest
+    const rc = e.risk_counts, cap = 64;
+    const crit = Math.min(rc.CRITICAL, 16), high = Math.min(rc.HIGH, 16);
+    const room = cap - crit - high, rest = rc.MEDIUM + rc.LOW || 1;
+    const med = Math.min(rc.MEDIUM, Math.max(rc.MEDIUM ? 1 : 0, Math.round(room * rc.MEDIUM / rest)));
+    const low = Math.min(rc.LOW, room - med);
+    Object.entries({ CRITICAL: crit, HIGH: high, MEDIUM: med, LOW: low }).forEach(([lvl, n]) => {
+      for (let k = 0; k < n; k++) {
+        const key = `${e.hostname}:${lvl}:${k}`, u = rnd(key), v = rnd(key + "v");
+        nodes.push({ id: `p:${key}`, r: lvl === "LOW" ? 2.3 : lvl === "MEDIUM" ? 3.2 : 4.2, color: RISK_COLORS[lvl],
+          alpha: lvl === "LOW" ? .6 : 1, pulse: lvl === "HIGH" || lvl === "CRITICAL", phase: u, glow: lvl === "LOW" ? 2.4 : 3.4,
+          orbit: { parent: id, radius: 30 + u * 46, speed: (0.25 + v * 0.55) * (k % 2 ? 1 : -1), phase: u * 6.28, tilt: (v - .5) * 2.2 },
+          data: { host: e.hostname, level: lvl, count: rc[lvl] } });
+      }
+    });
+  });
+  map.set(nodes, edges);
+}
+
+/* ---------- security brief: plain-language summary of the live data ---------- */
+let briefKey = "";
+function writeBrief(d) {
+  const online = d.endpoints.filter(e => e.online), N = d.endpoints.length;
+  const risky = online.filter(e => ["HIGH", "CRITICAL"].includes(e.threat_level))
+    .sort((a, b) => LEVELS.indexOf(b.threat_level) - LEVELS.indexOf(a.threat_level));
+  const busiest = online.slice().sort((a, b) => b.system.cpu_percent - a.system.cpu_percent)[0];
+  const latest = d.recent_alerts[0];
+  const key = [online.length, N, risky.map(e => e.hostname + e.threat_level).join(), d.alert_total, d.new_alerts].join("|");
+  if (key === briefKey) return;   // only re-type when something important changed
+  briefKey = key;
+  const s = [];
+  s.push(N ? `<b>${online.length} of ${N}</b> laptop${N > 1 ? "s are" : " is"} reporting right now.` : "No laptop has reported yet.");
+  if (!risky.length) s.push(`No high-risk process is running. <b style="color:var(--low)">All clear.</b>`);
+  else risky.forEach(e => s.push(`<b style="color:${RISK_COLORS[e.threat_level]}">${esc(e.hostname)} is ${e.threat_level}</b> with ${e.risk_counts.HIGH + e.risk_counts.CRITICAL} high-risk process${e.risk_counts.HIGH + e.risk_counts.CRITICAL === 1 ? "" : "es"}.`));
+  if (latest) s.push(`Latest alert: <b>${esc(latest.alert_type)}</b> from ${esc(latest.process)} on ${esc(latest.endpoint)}${latest.mitre ? ` (${esc(latest.mitre.split(",")[0])})` : ""}.`);
+  if (busiest) s.push(`Busiest laptop: ${esc(busiest.hostname)} at ${Math.round(busiest.system.cpu_percent)}% CPU.`);
+  if (d.new_alerts) s.push(`<b>Next step:</b> review the ${d.new_alerts} new alert${d.new_alerts === 1 ? "" : "s"} on the <a href="/alerts">Alerts page</a>${risky.length ? ` or open <a href="/warroom">the War Room</a>` : ""}.`);
+  typeText(document.getElementById("brief"), s.join(" "));
+}
 
 poll(async () => {
   const d = await api("/api/overview");
   if (!d) return;
   last = d;
   const online = d.endpoints.filter(e => e.online);
-  document.getElementById("k-ep").textContent = `${online.length} / ${d.endpoints.length}`;
-  document.getElementById("k-proc").textContent = online.reduce((a, e) => a + e.process_count, 0);
-  document.getElementById("k-high").textContent = d.risk.HIGH + d.risk.CRITICAL;
-  document.getElementById("k-alerts").textContent = d.alert_total;
+  countTo(document.getElementById("k-ep"), online.length, { suffix: ` / ${d.endpoints.length}` });
+  countTo(document.getElementById("k-proc"), online.reduce((a, e) => a + e.process_count, 0));
+  countTo(document.getElementById("k-high"), d.risk.HIGH + d.risk.CRITICAL);
+  countTo(document.getElementById("k-alerts"), d.alert_total);
   document.getElementById("k-new").textContent = `${d.new_alerts} not reviewed`;
   const cpu = online.length ? online.reduce((a, e) => a + e.system.cpu_percent, 0) / online.length : 0;
-  document.getElementById("k-cpu").textContent = cpu.toFixed(1) + "%";
-  const worst = online.map(e => e.threat_level).sort((a, b) => LEVELS.indexOf(b) - LEVELS.indexOf(a))[0] || "LOW";
-  document.getElementById("threat").innerHTML = `Threat level ${badge(worst)}`;
-  drawChart();
-  document.getElementById("t-alerts").innerHTML = d.recent_alerts.map(a => `
+  countTo(document.getElementById("k-cpu"), cpu, { decimals: 1, suffix: "%" });
+  const worst = worstLevel(online.map(e => e.threat_level));
+  document.getElementById("threat").innerHTML = `<span class="muted small">Threat level</span> ${badge(worst)}`;
+  drawGauge(worst, d.risk);
+  writeBrief(d);
+  document.getElementById("ep-list").innerHTML = d.endpoints.map(e => `
+    <a class="ep-row" href="/endpoint/${encodeURIComponent(e.hostname)}"><span class="dot ${e.online ? "on" : "off"}"></span>
+      <span class="nm">${esc(e.hostname)}</span><span class="cpu">CPU ${Math.round(e.system.cpu_percent)}%</span>
+      ${e.online ? badge(e.threat_level) : '<span class="badge b-OK">OFFLINE</span>'}</a>`).join("")
+    || '<div class="muted small">No laptop has reported yet.</div>';
+  drawMap(d);
+  drawChart(false);
+  fillRows(document.getElementById("t-alerts"), d.recent_alerts.map(a => `
     <tr class="row-${esc(a.severity)}"><td class="muted">${esc(a.timestamp.slice(11))}</td><td>${esc(a.endpoint)}</td>
     <td>${esc(a.alert_type)}</td><td>${esc(a.process)}</td><td>${badge(a.severity)}</td>
     <td class="small trunc">${esc(a.mitre)}</td></tr>`).join("") ||
-    '<tr><td colspan="6" class="empty">No alerts yet 🎉</td></tr>';
+    '<tr><td colspan="6" class="empty">No alerts yet 🎉</td></tr>');
 });
 </script>
 {% endblock %}

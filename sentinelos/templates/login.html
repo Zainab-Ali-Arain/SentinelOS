@@ -1,24 +1,60 @@
-<!doctype html>
+{% from "_icons.html" import icon %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login · SentinelOS</title>
+  <script>(function () { let t = "light"; try { t = localStorage.getItem("theme") || t; } catch (e) {} document.documentElement.dataset.theme = t; })();  /* Light is the default */</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ url_for('static', filename='scene3d.js') }}"></script>
 </head>
 <body>
+<div class="backdrop"><i></i><i></i></div>
 <div class="login-page">
-  <form class="login-box" method="post">
-    <div class="logo">🛡</div>
-    <h1>SentinelOS</h1>
-    <p>Mini Endpoint Detection &amp; Response</p>
-    {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    <label for="username">Username</label>
-    <input id="username" name="username" autocomplete="username" required autofocus>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <button class="btn" type="submit">Sign in</button>
-  </form>
+  <div class="login-art" id="globe">
+    <div class="tagline"><h2>Endpoint Detection &amp; Response</h2>
+      <p>Watch every process, file and connection. <span>Catch threats live.</span></p></div>
+  </div>
+  <div class="login-side">
+    <form class="login-box" method="post">
+      <div class="logo">{{ icon("shield") }}</div>
+      <h1>SentinelOS</h1>
+      <p>Mini Endpoint Detection &amp; Response</p>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <div class="field" style="--i:0"><label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required autofocus></div>
+      <div class="field" style="--i:1"><label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <div class="field" style="--i:2"><button class="btn" type="submit">{{ icon("lock") }}Sign in</button></div>
+      <div class="theme-dots field" style="--i:3" id="theme-dots" title="Theme"></div>
+    </form>
+  </div>
 </div>
+<script>
+// theme dots under the form + play the boot animation after a successful sign-in
+const dots = document.getElementById("theme-dots");
+const drawDots = () => { dots.innerHTML = Object.entries(THEMES).map(([id, [name, bg, a, b]]) =>
+  `<button type="button" title="${name}" class="${id === currentTheme() ? "active" : ""}" style="background:linear-gradient(135deg,${bg} 45%,${a} 55%,${b})" onclick="setTheme('${id}')"></button>`).join(""); };
+drawDots();
+window.addEventListener("themechange", drawDots);
+document.querySelector(".login-box").addEventListener("submit", () => { try { sessionStorage.setItem("boot", "1"); } catch (e) {} });
+// Decorative 3D globe: laptops on a sphere exchanging reports, one flagged red.
+(function () {
+  const R = 200;
+  const scene = new Scene3D(document.getElementById("globe"), {
+    interactive: false, hud: false, sphere: R, spin: 0.0016, pitch: -0.28, yaw: 0.3, distance: 760, fit: 1.1,
+  });
+  const nodes = Scene3D.fibonacci(240, R).map((p, i) => ({ id: "d" + i, ...p, r: 1.5, color: "var(--accent)", alpha: .5, glow: 2.2 }));
+  const sites = [[.35, .4], [-.2, 1.6], [.6, 2.6], [-.5, 3.4], [.1, 4.3], [.45, 5.2], [-.35, 5.8], [.75, 1.1]];
+  sites.forEach(([lat, lon], i) => nodes.push({
+    id: "s" + i, x: Math.cos(lat) * Math.cos(lon) * R, y: Math.sin(lat) * R, z: Math.cos(lat) * Math.sin(lon) * R,
+    r: i === 3 ? 6 : 5, color: i === 3 ? "var(--high)" : i % 2 ? "var(--accent-2)" : "var(--low)", pulse: i === 3 || i === 0, glow: 4,
+  }));
+  const edges = [];
+  sites.forEach((_, i) => { if (i) edges.push({ a: "s0", b: "s" + i, color: i === 3 ? "var(--high)" : "var(--accent)", curve: 70 + i * 6, flow: true, speed: 1 + i * .15, alpha: .55, width: 1.4 }); });
+  scene.set(nodes, edges);
+})();
+</script>
 </body>
 </html>

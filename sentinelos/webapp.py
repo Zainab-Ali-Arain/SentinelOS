@@ -156,6 +156,12 @@ def create_app(engine=None, users=None):
     def activity():
         return render_template("activity.html", page="activity")
 
+    @app.route("/warroom")
+    @login_required
+    def warroom():
+        """Full-screen 3D command centre (same data and scope as the other pages)."""
+        return render_template("warroom.html", page="warroom")
+
     @app.route("/users", methods=["GET", "POST"])
     @login_required
     def users_page():

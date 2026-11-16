@@ -46,6 +46,13 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.client.get("/").status_code, 302)
         self.assertEqual(self.client.get("/api/overview").status_code, 401)
 
+    def test_warroom_needs_login(self):
+        self.assertEqual(self.client.get("/warroom").status_code, 302)
+        self.login("ali", "ali12345")
+        page = self.client.get("/warroom")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"WAR ROOM", page.data)
+
     def test_login_and_logout(self):
         self.assertEqual(self.login("admin", "admin123").status_code, 302)
         self.assertEqual(self.client.get("/api/overview").status_code, 200)

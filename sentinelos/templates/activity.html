@@ -1,25 +1,26 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Activity Log{% endblock %}
 {% block content %}
 <div class="topbar">
   <div><h1>Activity Log</h1><div class="sub">Process starts/stops, file changes, logins and responses</div></div>
-  <a class="btn ghost" href="/export/events.csv">⬇ Export CSV</a>
+  <a class="btn ghost" href="/export/events.csv">{{ icon("download") }}Export CSV</a>
 </div>
 <div class="grid cols-2e mb">
-  <div class="card"><h2>Events by type</h2><div id="c-types"></div></div>
-  <div class="card"><h2>Events by laptop</h2><div id="c-eps"></div></div>
+  <div class="card reveal"><h2>{{ icon("bars") }} Events by type</h2><div id="c-types"></div></div>
+  <div class="card reveal"><h2>{{ icon("laptop") }} Events by laptop</h2><div id="c-eps"></div></div>
 </div>
-<div class="card">
+<div class="card reveal">
   <div class="tabs" id="groups">
     <button data-group="" class="active">All</button>
-    <button data-group="process">🚀 Apps opened / closed</button>
-    <button data-group="file">📁 File changes</button>
-    <button data-group="login">🔐 Logins</button>
-    <button data-group="response">⛔ Responses</button>
-    <button data-group="network">🌐 Suspicious connections</button>
+    <button data-group="process">{{ icon("rocket") }}Apps opened / closed</button>
+    <button data-group="file">{{ icon("file") }}File changes</button>
+    <button data-group="login">{{ icon("lock") }}Logins</button>
+    <button data-group="response">{{ icon("stop") }}Responses</button>
+    <button data-group="network">{{ icon("globe") }}Suspicious connections</button>
   </div>
   <div class="toolbar">
-    <input id="search" placeholder="Search events (e.g. Word, notepad, document_1)..." style="flex:1;min-width:200px">
+    <div class="search">{{ icon("search") }}<input id="search" placeholder="Search events (e.g. Word, notepad, document_1)..."></div>
   </div>
   <div class="table-wrap"><table><thead><tr><th>Time</th><th>Laptop</th><th>Event</th><th>Process</th><th>PID</th><th>Severity</th><th>Details</th></tr></thead>
   <tbody id="rows"></tbody></table></div>
@@ -35,6 +36,7 @@ const NICE = { PROCESS_START: "🚀 App opened", PROCESS_STOP: "✖ App closed",
 document.querySelectorAll("#groups button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll("#groups button").forEach(x => x.classList.toggle("active", x === b));
   group = b.dataset.group;
+  delete document.getElementById("rows").dataset.filled;   // new list slides in
   load();
 }));
 let typing;
@@ -47,12 +49,12 @@ async function load() {
   if (!d) return;
   barList(document.getElementById("c-types"), topN(d.by_type).map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i) })));
   barList(document.getElementById("c-eps"), topN(d.by_endpoint).map(([k, v], i) => ({ label: k, value: v, color: seriesColor(i + 1) })));
-  document.getElementById("rows").innerHTML = d.events.map(e => `
+  fillRows(document.getElementById("rows"), d.events.map(e => `
     <tr class="${e.severity === "MEDIUM" ? "row-MEDIUM" : ""}"><td class="small muted nowrap">${esc(e.timestamp)}</td><td>${esc(e.endpoint)}</td>
     <td class="nowrap"><b>${esc(NICE[e.event_type] || e.event_type)}</b></td><td>${esc(e.process)}</td><td class="mono">${e.pid || ""}</td>
     <td>${e.severity === "MEDIUM" ? badge("MEDIUM") : '<span class="muted small">info</span>'}</td>
     <td class="small mono trunc" title="${esc(e.details)}">${esc(e.details)}</td></tr>`).join("")
-    || '<tr><td colspan="7" class="empty">No events</td></tr>';
+    || '<tr><td colspan="7" class="empty">No events</td></tr>');
 }
 poll(load, 5000);
 </script>
