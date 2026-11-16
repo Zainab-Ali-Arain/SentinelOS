@@ -1,4 +1,4 @@
-<!doctype html>
+{% from "_icons.html" import icon %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -6,26 +6,47 @@
   <meta name="csrf" content="{{ csrf }}">
   <meta name="role" content="{{ role }}">
   <meta name="host" content="{{ hostname }}">
+  <meta name="view-transition" content="same-origin">
   <title>{% block title %}SentinelOS{% endblock %} · SentinelOS</title>
+  <script>/* apply the saved theme before the page paints (no flash) */
+    (function () { let t = "light"; try { t = localStorage.getItem("theme") || t; } catch (e) {} document.documentElement.dataset.theme = t; })();  /* Light is the default */</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='scene3d.js') }}"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
+<div class="backdrop"><i></i><i></i></div>
+{% block page %}
 <div class="layout">
   <aside class="sidebar">
-    <div class="brand"><div class="logo">🛡</div><div>SentinelOS<small>Mini EDR</small></div></div>
+    <div class="brand"><div class="logo">{{ icon("shield") }}</div><div>SentinelOS<small>Mini EDR</small></div></div>
+    <button class="side-search" type="button" onclick="openPalette()" title="Command palette (Ctrl+K)">{{ icon("search") }}<span class="lbl">Search or jump to...</span><kbd>Ctrl K</kbd></button>
     <nav class="nav">
-      <a href="/" class="{{ 'active' if page == 'overview' }}">📊 Overview</a>
-      <a href="/endpoints" class="{{ 'active' if page == 'endpoints' }}">💻 Endpoints</a>
-      <a href="/alerts" class="{{ 'active' if page == 'alerts' }}">🚨 Alerts
-        <span id="nav-alerts" class="badge b-HIGH" style="margin-left:auto"></span></a>
-      <a href="/activity" class="{{ 'active' if page == 'activity' }}">📜 Activity Log</a>
-      {% if role == 'admin' %}<a href="/users" class="{{ 'active' if page == 'users' }}">👥 Users</a>{% endif %}
+      <a href="/" class="{{ 'active' if page == 'overview' }}">{{ icon("overview") }}Overview</a>
+      <a href="/endpoints" class="{{ 'active' if page == 'endpoints' }}">{{ icon("laptop") }}Endpoints</a>
+      <a href="/alerts" class="{{ 'active' if page == 'alerts' }}">{{ icon("alert") }}Alerts
+        <span id="nav-alerts" class="badge b-HIGH"></span></a>
+      <a href="/activity" class="{{ 'active' if page == 'activity' }}">{{ icon("activity") }}Activity Log</a>
+      {% if role == 'admin' %}<a href="/users" class="{{ 'active' if page == 'users' }}">{{ icon("users") }}Users</a>{% endif %}
+      <a href="/warroom" class="wr">{{ icon("globe") }}War Room<span class="new">3D</span></a>
     </nav>
-    <div class="me"><b>{{ user }}</b><span class="muted small">{{ role }}</span> · <a href="/logout">Log out</a></div>
+    <div class="side-foot">
+      <div class="tool-row">
+        <button class="icon-btn" id="theme-btn" type="button" onclick="openThemePicker(this)" title="Theme (t)">{{ icon("palette") }}</button>
+        <button class="icon-btn" type="button" onclick="openDrawer()" title="Notifications (n)">{{ icon("bell") }}<span class="count bell-count"></span></button>
+        <button class="icon-btn" type="button" data-sound onclick="setSound(!soundOn())" title="Alert sound on/off">{{ icon("sound") }}</button>
+        <button class="icon-btn" type="button" onclick="toggleFullscreen()" title="Full screen (f)">{{ icon("expand") }}</button>
+      </div>
+      <div class="me">
+        <div class="avatar">{{ (user or "?")[:1] }}</div>
+        <div class="who"><b>{{ user }}</b><span class="muted">{{ role }}</span></div>
+        <a class="logout" href="/logout" title="Log out">{{ icon("logout") }}</a>
+      </div>
+    </div>
   </aside>
   <main>{% block content %}{% endblock %}</main>
 </div>
+{% endblock %}
 <div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="box"></div></div>
 <div id="toasts"></div>
 {% block scripts %}{% endblock %}

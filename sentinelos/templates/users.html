@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}Users{% endblock %}
 {% block content %}
 <div class="topbar"><div><h1>Users</h1><div class="sub">Who can log in to the dashboard</div></div></div>
-{% if message %}<div class="card mb {{ 'error' if message.startswith('Error') }}">{{ message }}</div>{% endif %}
+{% if message %}<div class="card mb reveal {{ 'error' if message.startswith('Error') else 'notice' }}">{{ message }}</div>{% endif %}
 <div class="grid cols-2e">
-  <div class="card">
-    <h2>Accounts</h2>
-    <table><thead><tr><th>Username</th><th>Role</th><th>Can see</th><th></th></tr></thead><tbody>
+  <div class="card reveal">
+    <h2>{{ icon("users") }} Accounts</h2>
+    <div class="table-wrap"><table><thead><tr><th>Username</th><th>Role</th><th>Can see</th><th></th></tr></thead><tbody class="enter">
     {% for u in users %}
-      <tr><td><b>{{ u.username }}</b></td>
+      <tr style="--r: {{ loop.index0 }}"><td><div style="display:flex;align-items:center;gap:10px"><span class="avatar" style="width:28px;height:28px;font-size:12px">{{ u.username[:1] }}</span><b>{{ u.username }}</b></div></td>
         <td><span class="badge {{ 'b-NEW' if u.role == 'admin' else 'b-OK' }}">{{ u.role }}</span></td>
         <td>{% if u.role == 'admin' or u.endpoint == all_laptops %}All laptops
             {% elif u.endpoint %}<span class="mono">{{ u.endpoint }}</span>
@@ -19,10 +20,10 @@
             <input type="hidden" name="username" value="{{ u.username }}">
             <button class="btn danger sm">Delete</button></form>{% else %}<span class="muted small">you</span>{% endif %}</td></tr>
     {% endfor %}
-    </tbody></table>
+    </tbody></table></div>
   </div>
-  <div class="card">
-    <h2>Add or update a user</h2>
+  <div class="card reveal">
+    <h2>{{ icon("plus") }} Add or update a user</h2>
     <form method="post" style="display:grid;gap:10px">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="add">
       <input name="username" placeholder="Username (e.g. saifullah)" required>
@@ -35,7 +36,7 @@
         {% for l in laptops %}<option value="{{ l }}">{% endfor %}
         <option value="{{ all_laptops }}">All laptops (read-only, e.g. teacher)</option>
       </datalist>
-      <button class="btn" type="submit">Save user</button>
+      <button class="btn" type="submit" style="justify-content:center">{{ icon("plus") }}Save user</button>
     </form>
     <p class="muted small" style="margin-top:14px"><b>admin</b> sees every laptop, can terminate processes, change alert status and manage users.<br>
       <b>viewer</b> sees only the one laptop chosen here (its processes, alerts and activity) and cannot change anything.

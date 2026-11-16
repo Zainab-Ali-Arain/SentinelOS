@@ -1,34 +1,36 @@
 {% extends "base.html" %}
+{% from "_icons.html" import icon %}
 {% block title %}{{ host }}{% endblock %}
 {% block content %}
 <div class="topbar">
-  <div><a href="/endpoints" class="small">← All endpoints</a>
+  <div><a href="/endpoints" class="crumb">{{ icon("back") }}All endpoints</a>
     <h1 id="title">{{ host }}</h1><div class="sub" id="sub"></div></div>
-  <div style="display:flex;gap:12px;align-items:center"><span class="live">Live</span><span id="threat"></span></div>
+  <div class="actions"><span class="live">Live</span><span id="threat"></span></div>
 </div>
 
 <div class="grid kpis">
-  <div class="card kpi"><div class="label">CPU</div><div class="value" id="k-cpu">-</div><div class="hint" id="k-cores"></div></div>
-  <div class="card kpi" style="--kpi-color:var(--accent-2)"><div class="label">Memory</div><div class="value" id="k-ram">-</div><div class="hint" id="k-ramt"></div></div>
-  <div class="card kpi" style="--kpi-color:var(--low)"><div class="label">Processes</div><div class="value" id="k-proc">-</div><div class="hint">running now</div></div>
-  <div class="card kpi" style="--kpi-color:var(--high)"><div class="label">High-risk</div><div class="value" id="k-high">-</div><div class="hint">processes</div></div>
-  <div class="card kpi" style="--kpi-color:var(--medium)"><div class="label">Connections</div><div class="value" id="k-net">-</div><div class="hint">active</div></div>
+  <div class="card kpi reveal tilt"><div class="label">{{ icon("cpu") }}CPU</div><div class="value" id="k-cpu">-</div><div class="hint" id="k-cores"></div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--accent-2)"><div class="label">{{ icon("memory") }}Memory</div><div class="value" id="k-ram">-</div><div class="hint" id="k-ramt"></div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--low)"><div class="label">{{ icon("layers") }}Processes</div><div class="value" id="k-proc">-</div><div class="hint">running now</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--high)"><div class="label">{{ icon("target") }}High-risk</div><div class="value" id="k-high">-</div><div class="hint">processes</div></div>
+  <div class="card kpi reveal tilt" style="--kpi-color:var(--medium)"><div class="label">{{ icon("globe") }}Connections</div><div class="value" id="k-net">-</div><div class="hint">active</div></div>
 </div>
 
-<div class="card mb"><h2>CPU &amp; memory (live)</h2><div id="c-usage"></div></div>
+<div class="card mb reveal"><h2>CPU &amp; memory (live)</h2><div id="c-usage"></div></div>
 
-<div class="card">
+<div class="card reveal">
   <div class="tabs">
-    <button data-tab="procs" class="active">⚙️ Processes</button>
-    <button data-tab="tree">🌳 Process Tree</button>
-    <button data-tab="net">🌐 Network</button>
-    <button data-tab="files">📁 File Events</button>
+    <button data-tab="procs" class="active">{{ icon("layers") }}Processes</button>
+    <button data-tab="tree">{{ icon("tree") }}Process Tree</button>
+    <button data-tab="tree3d">{{ icon("cube") }}3D Process Tree</button>
+    <button data-tab="net">{{ icon("globe") }}Network</button>
+    <button data-tab="files">{{ icon("file") }}File Events</button>
   </div>
 
   <div data-pane="procs">
     <div class="toolbar">
-      <input id="search" placeholder="Search app, process, PID, path..." style="flex:1;min-width:200px">
-      <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer">
+      <div class="search">{{ icon("search") }}<input id="search" placeholder="Search app, process, PID, path..."></div>
+      <label class="small" style="display:flex;gap:8px;align-items:center;cursor:pointer">
         <input type="checkbox" id="mine" checked> Only my apps (hide Windows background processes)</label>
       <select id="risk"><option value="">All risk levels</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
       <span class="muted small" id="count"></span>
@@ -40,6 +42,13 @@
     </tr></thead><tbody id="procs"></tbody></table></div>
   </div>
   <div data-pane="tree" hidden><div class="table-wrap tree" id="tree"></div></div>
+  <div data-pane="tree3d" hidden>
+    <div class="view3d" id="tree3d" style="height:540px">
+      <div class="legend3d"><span><i style="background:var(--low)"></i>Your apps (low risk)</span><span><i style="background:var(--muted)"></i>System / background</span>
+        <span><i style="background:var(--medium)"></i>Medium</span><span><i style="background:var(--high)"></i>High</span><span><i style="background:var(--critical)"></i>Critical</span></div>
+    </div>
+    <div class="muted small" style="margin-top:10px">Parents sit above their children. Bigger dots use more memory. Hover a dot for details, click it to investigate.</div>
+  </div>
   <div data-pane="net" hidden><div class="table-wrap"><table><thead><tr><th>PID</th><th>Process</th><th>Local</th><th>Remote</th><th>Port</th><th>Status</th><th></th></tr></thead><tbody id="net"></tbody></table></div></div>
   <div data-pane="files" hidden><div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>Path</th></tr></thead><tbody id="files"></tbody></table></div></div>
 </div>
@@ -55,7 +64,10 @@ const sortRows = sortable(document.getElementById("ptable"), sortState, renderPr
 
 document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("active", x === b));
-  document.querySelectorAll("[data-pane]").forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  document.querySelectorAll("[data-pane]").forEach(p => {
+    p.hidden = p.dataset.pane !== b.dataset.tab;
+    if (!p.hidden) { p.classList.remove("pane-in"); void p.offsetWidth; p.classList.add("pane-in"); }
+  });
 }));
 document.getElementById("search").addEventListener("input", renderProcs);
 document.getElementById("mine").addEventListener("change", renderProcs);
@@ -71,16 +83,18 @@ function renderProcs() {
     (!mine || !p.system || p.level !== "LOW") &&   // risky system processes always stay visible
     (!q || `${p.pid} ${p.app} ${p.name} ${p.path} ${p.parent_name}`.toLowerCase().includes(q))));
   document.getElementById("count").textContent = `${rows.length} of ${data.processes.length}`;
-  document.getElementById("procs").innerHTML = rows.map(p => `
+  fillRows(document.getElementById("procs"), rows.map(p => `
     <tr class="row-${p.level}"><td class="mono">${p.pid}</td><td><b>${esc(p.app)}</b><div class="muted small trunc" title="${esc(p.path)}">${esc(p.name)} · ${esc(p.path || "path hidden by Windows")}</div></td>
     <td>${esc(p.parent_name)}</td><td class="small">${esc(p.username)}</td><td>${p.cpu_percent}</td><td>${p.memory_mb}</td>
     <td>${p.threads}</td><td><b>${p.score}</b></td><td>${badge(p.level)}</td>
     <td class="reasons">${esc(p.reasons.concat(p.notes).join(", "))}</td>
     <td class="nowrap"><button class="btn ghost sm" title="Details" onclick="details(${p.pid})">🔍</button>
-      ${isLocal && ROLE === "admin" ? `<button class="btn danger sm" title="Terminate" onclick="terminate(${p.pid})">⛔</button>` : ""}</td></tr>`).join("");
+      ${isLocal && ROLE === "admin" ? `<button class="btn danger sm" title="Terminate" onclick="terminate(${p.pid})">⛔</button>` : ""}</td></tr>`).join("")
+    || '<tr><td colspan="11" class="empty">No processes match</td></tr>');
 }
 
-function renderTree() {
+// parent -> children map shared by the 2D and 3D trees
+function childrenMap() {
   const byPid = new Map(data.processes.map(p => [p.pid, p]));
   const kids = new Map();
   data.processes.forEach(p => {
@@ -88,17 +102,78 @@ function renderTree() {
     if (!kids.has(parent)) kids.set(parent, []);
     kids.get(parent).push(p);
   });
+  kids.forEach(list => list.sort((a, b) => a.pid - b.pid));
+  return kids;
+}
+
+function renderTree() {
+  const kids = childrenMap();
   const label = p => `<b>${esc(p.app)}</b> <span class="muted small">${esc(p.name)} · PID ${p.pid} · CPU ${p.cpu_percent}%</span> ${p.level !== "LOW" ? badge(p.level) : ""}`;
   const node = (p, depth) => {
-    const children = (kids.get(p.pid) || []).sort((a, b) => a.pid - b.pid);
+    const children = kids.get(p.pid) || [];
     if (!children.length || depth > 40) return `<li><span class="leaf">${label(p)}</span></li>`;
     return `<li><details data-pid="${p.pid}" ${closed.has(p.pid) ? "" : "open"}><summary>${label(p)}</summary>
       <ul>${children.map(c => node(c, depth + 1)).join("")}</ul></details></li>`;
   };
   const el = document.getElementById("tree");
-  el.innerHTML = `<ul>${(kids.get("root") || []).sort((a, b) => a.pid - b.pid).map(p => node(p, 0)).join("")}</ul>`;
+  el.innerHTML = `<ul>${(kids.get("root") || []).map(p => node(p, 0)).join("")}</ul>`;
   el.querySelectorAll("details").forEach(d => d.addEventListener("toggle", () =>
     d.open ? closed.delete(+d.dataset.pid) : closed.add(+d.dataset.pid)));
+}
+
+/* ---------- 3D process tree ("cone tree") ----------
+   Each root gets a slice of the circle sized by how many processes hang under it;
+   children share their parent's slice, one ring further out and one level lower. */
+const scene = new Scene3D(document.getElementById("tree3d"), {
+  floorY: -200, floorStep: 90, floorRings: 4, distance: 820, pitch: -0.5,
+  tooltip: n => { const p = n.data; return `<b>${esc(p.app)}</b><span class="muted">${esc(p.name)} · PID ${p.pid}</span><br>
+    Parent: ${esc(p.parent_name)} (${p.ppid})<br>CPU <b>${p.cpu_percent}%</b> · Memory <b>${p.memory_mb} MB</b> · ${p.threads} threads
+    <div style="margin-top:6px">${badge(p.level)} <span class="muted small">score ${p.score}</span></div>
+    ${p.reasons.length ? `<div class="small" style="margin-top:4px">${esc(p.reasons.join(", "))}</div>` : ""}`; },
+  onClick: n => details(n.data.pid),
+});
+
+function renderTree3d() {
+  const kids = childrenMap(), roots = kids.get("root") || [];
+  const leaves = new Map();
+  let maxDepth = 0;
+  const count = (p, depth) => {
+    maxDepth = Math.max(maxDepth, depth);
+    const ch = depth > 40 ? [] : (kids.get(p.pid) || []);
+    const n = ch.length ? ch.reduce((a, c) => a + count(c, depth + 1), 0) : 1;
+    leaves.set(p.pid, n);
+    return n;
+  };
+  roots.forEach(r => count(r, 0));
+  // weight = leaves^0.7 so one huge branch (e.g. svchost) does not squeeze the others
+  const weight = pid => Math.pow(leaves.get(pid), 0.7);
+  const total = roots.reduce((a, r) => a + weight(r.pid), 0) || 1;
+  const gap = Math.min(95, 360 / Math.max(maxDepth, 1)), top = maxDepth * gap / 2;
+  const ring0 = roots.length > 1 ? 90 : 0, ringStep = Math.max(60, Math.min(100, 340 / Math.max(maxDepth, 1)));
+  const outer = ring0 + maxDepth * ringStep;
+  const nodes = [], edges = [];
+  const place = (p, a0, a1, depth, parentId) => {
+    const ang = (a0 + a1) / 2, rad = ring0 + depth * ringStep, id = `p${p.pid}`;
+    const risky = p.level !== "LOW";
+    nodes.push({ id, x: Math.cos(ang) * rad, y: top - depth * gap, z: Math.sin(ang) * rad,
+      r: 3.2 + Math.min(9, Math.sqrt(Math.max(p.memory_mb, 0)) / 3.2),
+      color: risky ? RISK_COLORS[p.level] : p.system ? "var(--muted)" : "var(--low)",
+      alpha: !risky && p.system ? .55 : 1, pulse: p.level === "HIGH" || p.level === "CRITICAL", phase: (p.pid % 97) / 97,
+      label: p.app, showLabel: risky || (depth <= 1 && leaves.get(p.pid) > 4),
+      labelColor: risky ? RISK_COLORS[p.level] : null, labelWeight: risky ? 750 : 600,
+      from: { x: 0, y: top + gap, z: 0 }, data: p });
+    if (parentId) edges.push({ a: parentId, b: id, color: risky ? RISK_COLORS[p.level] : "var(--line-2)",
+      alpha: risky ? .85 : .5, width: risky ? 1.8 : 1, flow: risky });
+    const ch = depth > 40 ? [] : (kids.get(p.pid) || []);
+    const sum = ch.reduce((s, c) => s + weight(c.pid), 0);
+    let a = a0;
+    ch.forEach(c => { const span = (a1 - a0) * weight(c.pid) / sum; place(c, a, a + span, depth + 1, id); a += span; });
+  };
+  let a = 0;
+  roots.forEach(r => { const span = Math.PI * 2 * weight(r.pid) / total; place(r, a, a + span, 0, null); a += span; });
+  Object.assign(scene.o, { floorY: top - maxDepth * gap - 30, floorRings: 3, floorStep: Math.max(outer, 120) / 3,
+    distance: Math.max(720, outer * 2.2) });
+  scene.set(nodes, edges);
 }
 
 async function details(pid) {
@@ -124,26 +199,27 @@ poll(async () => {
   data = d;
   const s = d.system;
   document.getElementById("sub").innerHTML = `<span class="dot ${d.online ? "on" : "off"}"></span>${d.online ? "Online" : "Offline"} · ${esc(d.ip)} · ${esc(s.os)} · booted ${esc(s.boot_time)}`;
-  document.getElementById("threat").innerHTML = `Threat ${badge(d.threat_level)}`;
-  document.getElementById("k-cpu").textContent = s.cpu_percent + "%";
+  document.getElementById("threat").innerHTML = `<span class="muted small">Threat</span> ${badge(d.threat_level)}`;
+  countTo(document.getElementById("k-cpu"), s.cpu_percent, { decimals: 1, suffix: "%" });
   document.getElementById("k-cores").textContent = `${s.cpu_cores} cores`;
-  document.getElementById("k-ram").textContent = s.ram_used_percent + "%";
+  countTo(document.getElementById("k-ram"), s.ram_used_percent, { decimals: 1, suffix: "%" });
   document.getElementById("k-ramt").textContent = `of ${s.ram_total_gb} GB`;
-  document.getElementById("k-proc").textContent = d.processes.length;
-  document.getElementById("k-high").textContent = d.risk_counts.HIGH + d.risk_counts.CRITICAL;
-  document.getElementById("k-net").textContent = d.connections.length;
+  countTo(document.getElementById("k-proc"), d.processes.length);
+  countTo(document.getElementById("k-high"), d.risk_counts.HIGH + d.risk_counts.CRITICAL);
+  countTo(document.getElementById("k-net"), d.connections.length);
   lineChart(document.getElementById("c-usage"), [
-    { name: "CPU", color: "#8b5a2b", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
-    { name: "Memory", color: "#c08552", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
+    { name: "CPU", color: "var(--s1)", points: d.history.map(h => ({ t: h.t, v: h.cpu })) },
+    { name: "Memory", color: "var(--s2)", points: d.history.map(h => ({ t: h.t, v: h.ram })) }], { height: 200 });
   renderProcs();
   renderTree();
-  document.getElementById("net").innerHTML = d.connections.map(c => `
+  renderTree3d();
+  fillRows(document.getElementById("net"), d.connections.map(c => `
     <tr class="${c.suspicious ? "row-HIGH" : ""}"><td class="mono">${c.pid}</td><td>${esc(c.process)}</td><td class="mono">${esc(c.local)}</td>
     <td class="mono">${esc(c.remote_ip)}</td><td>${c.remote_port}</td><td class="small">${esc(c.status)}</td>
-    <td>${c.suspicious ? badge("HIGH") : ""}</td></tr>`).join("") || '<tr><td colspan="7" class="empty">No active connections</td></tr>';
-  document.getElementById("files").innerHTML = d.file_events.slice().reverse().map(e => `
+    <td>${c.suspicious ? badge("HIGH") : ""}</td></tr>`).join("") || '<tr><td colspan="7" class="empty">No active connections</td></tr>');
+  fillRows(document.getElementById("files"), d.file_events.slice().reverse().map(e => `
     <tr><td class="muted">${timeOf(e.time)}</td><td>${esc(e.type)}</td><td class="mono">${esc(e.path)}${e.dest ? " → " + esc(e.dest) : ""}</td></tr>`).join("")
-    || '<tr><td colspan="3" class="empty">No file activity in the monitored folder</td></tr>';
+    || '<tr><td colspan="3" class="empty">No file activity in the monitored folder</td></tr>');
 });
 </script>
 {% endblock %}

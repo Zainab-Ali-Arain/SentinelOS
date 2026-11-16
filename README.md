@@ -3,10 +3,32 @@
 An Operating Systems + Cybersecurity project. SentinelOS monitors the
 **processes, files and network connections** of one or more laptops, scores
 suspicious behaviour with rules, raises alerts, logs everything to SQLite and
-shows it all on a **web dashboard with login, live graphs and four dashboard
-pages**.
+shows it all on a **web dashboard with login, live graphs, 3D views and a
+full-screen 3D War Room**.
 
 ![Overview](docs/overview.png)
+
+## The interface
+
+- **4 themes:** Light (default), Cyber (dark neon), Matrix (green terminal with falling "digital rain") and Synthwave (retro sunset grid). Pick one with the palette button in the sidebar or press `t`; switching plays a circular reveal animation and the choice is remembered.
+- **3D War Room** (`/warroom`): a full-screen command centre. Every laptop sits on a rotating 3D globe with its processes orbiting it (coloured by risk). When a new alert arrives, a comet flies in and hits that laptop with a shockwave, the screen flashes and the live terminal feed logs it. Also: radar, live counters, clock, full-screen mode and a *Replay* button for demos.
+- **3D views on the dashboard:** a 3D network map on the Overview and a **3D process tree** on every laptop page (parents above children, bigger dots use more memory, risky branches glow and pulse). Drag to rotate, scroll or pinch to zoom, hover for details, click to investigate.
+- **Boot sequence** after login, **command palette** (`Ctrl+K` or `/`) to jump to any page, laptop or action, **notifications drawer** (`n`), **keyboard shortcuts** (`?`), optional **alert sound**, full screen (`f`).
+- **Security brief:** a plain-language summary of the live situation, typed out on the Overview (written by rules from the live data, not by an AI model).
+- Animated everywhere: count-up numbers, charts that draw themselves, live hover tooltips, 3D-tilt cards, sliding tabs, page transitions, loading skeletons. Respects the operating system's *reduce motion* setting.
+- Works **offline**: the 3D engine (`static/scene3d.js`) is written from scratch on `<canvas>`; no fonts, scripts or libraries are downloaded from the internet.
+
+![Themes](docs/themes.png)
+![War Room](docs/warroom.png)
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+K` or `/` | Command palette |
+| `g` then `o` / `e` / `a` / `l` / `w` / `u` | Go to Overview / Endpoints / Alerts / Activity / War Room / Users |
+| `t` | Next theme |
+| `n` | Notifications |
+| `f` | Full screen |
+| `?` | Show all shortcuts |
 
 ## Features
 
@@ -24,7 +46,7 @@ pages**.
 - **Rule-based risk scoring** with **MITRE ATT&CK** mapping
 - **Safe responses:** terminate (admin only, confirmed), mark alerts reviewed/resolved/false positive
 - **SQLite logging** + CSV export; old activity events are deleted after 7 days and the log file rolls over at 5 MB, so the disk never fills up
-- **17 unit tests** (detection rules + login/API security)
+- **25 unit tests** (detection rules, app names, login/API security)
 
 ## Setup
 
@@ -67,9 +89,12 @@ protected system processes. Without it the EDR still works and skips them.
 | **Alerts** | Every alert with severity, reasons and MITRE ATT&CK IDs; filters; click for details and to mark reviewed/resolved/false positive; CSV export |
 | **Activity Log** | Process starts/stops, file changes, logins, responses; charts; CSV export |
 | **Users** (admin) | Add/remove dashboard accounts |
+| **War Room** | Full-screen 3D globe of all laptops, incoming-alert comets, live feed, radar |
 
 ![Endpoints](docs/endpoints.png)
 ![Endpoint detail](docs/endpoint.png)
+![3D process tree](docs/process_tree_3d.png)
+![Command palette](docs/command_palette.png)
 ![Alerts](docs/alerts.png)
 
 ## Monitoring group members' laptops (with their permission)
