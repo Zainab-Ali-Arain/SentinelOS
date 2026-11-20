@@ -34,5 +34,6 @@ def get_connections():
             "remote_port": c.raddr.port,
             "status": c.status,
             "suspicious": c.raddr.port in config.SUSPICIOUS_PORTS,
+            "tor": c.raddr.port in config.TOR_PORTS,
         })
     return results
