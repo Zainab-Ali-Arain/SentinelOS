@@ -103,6 +103,38 @@ USB_MONITOR = True            # watch for USB drives being plugged in
 USB_WATCH_WRITES = True       # also watch what is copied TO the USB (data-leak check)
 USB_LEAK_ALERT_LEVEL = "HIGH" # level for a removal where files were copied out
 
+# ---- Real system-protected files (File Integrity Monitoring) ----
+# These are OS files a normal program should never change. We only READ and
+# HASH them (never modify/delete). If one changes, it is a strong sign of
+# compromise -> CRITICAL alert. OS-aware so the same code works everywhere.
+PROTECT_SYSTEM_FILES = True
+
+
+def _protected_targets():
+    """Return (files, dirs) of high-value protected paths for this OS."""
+    files, dirs = [], []
+    home = os.path.expanduser("~")
+    if os.name == "nt":  # Windows
+        sysroot = os.environ.get("SystemRoot", r"C:\Windows")
+        files.append(os.path.join(sysroot, "System32", "drivers", "etc", "hosts"))
+        appdata = os.environ.get("APPDATA", "")
+        programdata = os.environ.get("ProgramData", r"C:\ProgramData")
+        if appdata:
+            dirs.append(os.path.join(appdata, "Microsoft", "Windows",
+                                     "Start Menu", "Programs", "Startup"))
+        dirs.append(os.path.join(programdata, "Microsoft", "Windows",
+                                 "Start Menu", "Programs", "StartUp"))
+    elif sys.platform == "darwin":  # macOS
+        files += ["/etc/hosts", "/etc/sudoers"]
+        dirs.append(os.path.join(home, "Library", "LaunchAgents"))
+    else:  # Linux
+        files += ["/etc/hosts", "/etc/passwd", "/etc/sudoers", "/etc/crontab"]
+        files.append(os.path.join(home, ".ssh", "authorized_keys"))
+    return files, dirs
+
+
+PROTECTED_FILES, PROTECTED_DIRS = _protected_targets()
+
 # ---- Duplicate / mass file-creation (ransomware-style staging) ----
 # Separate from the generic "burst": this looks specifically at NEW files being
 # created fast (a virus copying/duplicating itself or encrypting into copies).

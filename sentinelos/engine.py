@@ -67,6 +67,19 @@ class SentinelEngine:
             if alert:
                 new_alerts.append(alert)
 
+        # Real OS-protected files (hosts, startup, /etc/passwd, ...) -> CRITICAL
+        if config.PROTECT_SYSTEM_FILES:
+            sys_changes = self.file_monitor.check_protected()
+            if sys_changes:
+                names = [f"{os.path.basename(p)} {s.lower()}" for p, s in sys_changes]
+                alert = self._raise("FILE_INTEGRITY", f"{len(sys_changes)} SYSTEM file(s)",
+                                    0, 110, "CRITICAL",
+                                    names[:5] + (["..."] if len(names) > 5 else []),
+                                    {"files": [p for p, _ in sys_changes], "protected": True},
+                                    [config.MITRE["FILE_INTEGRITY"]])
+                if alert:
+                    new_alerts.append(alert)
+
         changes = self.file_monitor.check_integrity()
         if changes:
             # one alert per scan, listing what changed (avoids 100s of alerts)

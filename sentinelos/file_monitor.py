@@ -44,10 +44,13 @@ class FileMonitor:
         self.new_events = []               # events not yet saved to DB
         self.lock = threading.Lock()
         self.baseline = {}                 # path -> sha256 (integrity baseline)
+        self.protected = {}                # real system files -> {mtime,size,sha}
         self.observer = None
 
     def start(self):
         self.build_baseline()
+        if config.PROTECT_SYSTEM_FILES:
+            self.build_protected_baseline()
         self.observer = Observer()
         self.observer.schedule(_Handler(self), self.watch_dir, recursive=True)
         self.observer.daemon = True
@@ -122,3 +125,55 @@ class FileMonitor:
 
     def file_count(self):
         return sum(len(files) for _r, _d, files in os.walk(self.watch_dir))
+
+    # ---- Real system-protected files (read-only integrity monitoring) ----
+    @staticmethod
+    def _file_meta(path):
+        """(mtime, size, sha256) for a file, or None if it can't be read."""
+        try:
+            st = os.stat(path)
+        except OSError:
+            return None
+        sha = sha256_of(path)
+        if sha is None:
+            return None  # e.g. no permission (SAM/shadow) - skip, don't crash
+        return {"mtime": st.st_mtime, "size": st.st_size, "sha": sha}
+
+    def build_protected_baseline(self):
+        """Hash the OS's protected files once. We only read them, never change."""
+        self.protected = {}
+        targets = list(config.PROTECTED_FILES)
+        for d in config.PROTECTED_DIRS:
+            if os.path.isdir(d):
+                for root, _dirs, files in os.walk(d):
+                    targets.extend(os.path.join(root, n) for n in files)
+        for path in targets:
+            meta = self._file_meta(path)
+            if meta:
+                self.protected[path] = meta
+
+    def check_protected(self):
+        """Re-check protected files. Returns [(path, MODIFIED|DELETED)].
+
+        Cheap: only re-hashes a file when its mtime or size changed, so big
+        system files are not hashed on every scan.
+        """
+        changes = []
+        for path, old in list(self.protected.items()):
+            try:
+                st = os.stat(path)
+            except OSError:
+                changes.append((path, "DELETED"))
+                del self.protected[path]
+                continue
+            if st.st_mtime == old["mtime"] and st.st_size == old["size"]:
+                continue  # unchanged - skip hashing
+            sha = sha256_of(path)
+            if sha and sha != old["sha"]:
+                changes.append((path, "MODIFIED"))
+            self.protected[path] = {"mtime": st.st_mtime, "size": st.st_size,
+                                    "sha": sha or old["sha"]}
+        return changes
+
+    def protected_count(self):
+        return len(self.protected)
