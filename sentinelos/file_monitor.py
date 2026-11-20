@@ -80,6 +80,20 @@ class FileMonitor:
     def is_burst(self):
         return self.recent_count() >= config.FILE_BURST_COUNT
 
+    def recent_created_count(self, seconds=config.FILE_CREATE_WINDOW_SEC):
+        """How many NEW files were created in the last `seconds`.
+
+        A virus that duplicates itself or encrypts files into copies shows up
+        as many CREATED events in a short time, separate from edits/deletes.
+        """
+        cutoff = time.time() - seconds
+        with self.lock:
+            return sum(1 for e in self.events
+                       if e["time"] >= cutoff and e["type"] == "CREATED")
+
+    def is_duplication(self):
+        return self.recent_created_count() >= config.FILE_CREATE_COUNT
+
     # ---- File integrity monitoring (FIM) ----
     def build_baseline(self):
         """Hash every file currently in the watch dir. These are 'protected'."""

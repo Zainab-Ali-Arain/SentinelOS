@@ -50,6 +50,11 @@ MITRE = {
     "ioc_match": "Known Indicator of Compromise",
     "RANSOMWARE_BEHAVIOR": "T1486 Data Encrypted for Impact",
     "FILE_INTEGRITY": "T1565.001 Stored Data Manipulation",
+    "dark_web": "T1090.003 Multi-hop Proxy: Tor",
+    "DARK_WEB": "T1090.003 Multi-hop Proxy: Tor",
+    "USB_INSERTED": "T1091 Replication Through Removable Media",
+    "USB_DATA_LEAK": "T1052.001 Exfiltration over USB",
+    "DUPLICATE_FILES": "T1486 Data Encrypted for Impact",
 }
 
 # Office/document apps should never start a shell. If they do, it is a
@@ -84,6 +89,25 @@ UNUSUAL_PATH_MARKERS = [
 
 # Remote ports commonly linked to backdoors / test shells
 SUSPICIOUS_PORTS = {4444, 5555, 1337, 31337, 6667, 12345, 9001}
+
+# ---- Dark web / anonymiser (Tor) detection ----
+# How people reach the "dark web" (.onion) is the Tor network. We flag it two
+# ways: a Tor program running, or a connection to a typical Tor port.
+TOR_PROCESS_NAMES = {"tor.exe", "tor", "tor-real", "torbrowser.exe",
+                     "start-tor-browser", "obfs4proxy.exe", "obfs4proxy"}
+TOR_PORTS = {9001, 9030, 9040, 9050, 9051, 9150, 9151}
+DARK_WEB_SCORE = 40   # points added when Tor use is detected
+
+# ---- USB / removable media ----
+USB_MONITOR = True            # watch for USB drives being plugged in
+USB_WATCH_WRITES = True       # also watch what is copied TO the USB (data-leak check)
+USB_LEAK_ALERT_LEVEL = "HIGH" # level for a removal where files were copied out
+
+# ---- Duplicate / mass file-creation (ransomware-style staging) ----
+# Separate from the generic "burst": this looks specifically at NEW files being
+# created fast (a virus copying/duplicating itself or encrypting into copies).
+FILE_CREATE_WINDOW_SEC = 10   # window for counting new-file creations
+FILE_CREATE_COUNT = 25        # this many CREATED events in the window = alert
 
 # ---- Web dashboard + agents ----
 WEB_PORT = 8000            # dashboard: http://<server-ip>:8000

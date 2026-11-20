@@ -13,6 +13,7 @@ from .lists import IocList, TrustedList
 from .network_monitor import get_connections
 from .process_monitor import ProcessMonitor
 from .system_info import get_system_info
+from .usb_monitor import UsbMonitor
 
 LEVEL_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -24,6 +25,7 @@ class SentinelEngine:
         self.file_monitor = FileMonitor()
         self.iocs = IocList()
         self.trusted = TrustedList()
+        self.usb_monitor = UsbMonitor()
         self.last_alert = {}   # (type, pid, level) -> time, to avoid alert spam
         self.state = {}        # latest scan results, read by the dashboard
 
@@ -33,6 +35,7 @@ class SentinelEngine:
 
     def stop(self):
         self.file_monitor.stop()
+        self.usb_monitor.close()
         self.db.add_event("EDR_STOP")
 
     def scan(self):
@@ -72,6 +75,71 @@ class SentinelEngine:
                                 "HIGH", names[:5] + (["..."] if len(names) > 5 else []),
                                 {"files": [p for p, _ in changes]},
                                 [config.MITRE["FILE_INTEGRITY"]])
+            if alert:
+                new_alerts.append(alert)
+
+        # ---- Dark web / Tor usage ----
+        tor_conns = [c for c in connections if c.get("tor")]
+        tor_procs = [p for p in scored
+                     if p["name"].lower() in config.TOR_PROCESS_NAMES]
+        if tor_conns or tor_procs:
+            if tor_procs:
+                who = tor_procs[0]["name"]
+                pid = tor_procs[0]["pid"]
+                reason = f"Tor program running: {who}"
+            else:
+                who = tor_conns[0]["process"]
+                pid = tor_conns[0]["pid"]
+                reason = (f"{who} connected to a Tor port "
+                          f"{tor_conns[0]['remote_ip']}:{tor_conns[0]['remote_port']}")
+            alert = self._raise("DARK_WEB", who, pid, config.DARK_WEB_SCORE, "HIGH",
+                                [reason], {"connections": [
+                                    f"{c['remote_ip']}:{c['remote_port']}" for c in tor_conns[:5]]},
+                                [config.MITRE["DARK_WEB"]])
+            if alert:
+                new_alerts.append(alert)
+            self.db.add_event("DARK_WEB", who, pid, "HIGH", reason)
+
+        # ---- USB / removable media (insert + data-leak on removal) ----
+        if config.USB_MONITOR:
+            inserted, removed = self.usb_monitor.poll()
+            for drv in inserted:
+                detail = (f"{drv['device']} at {drv['mount']} | "
+                          f"size {drv['total_mb']} MB (used {drv['used_mb']} MB, "
+                          f"free {drv['free_mb']} MB) | inserted {drv['time']}")
+                self.db.add_event("USB_INSERTED", "removable media", 0, "MEDIUM", detail)
+                alert = self._raise("USB_INSERTED", drv["device"], 0, 25, "HIGH",
+                                    [f"Removable drive inserted: {drv['mount']}",
+                                     f"capacity {drv['total_mb']} MB, free {drv['free_mb']} MB"],
+                                    drv, [config.MITRE["USB_INSERTED"]])
+                if alert:
+                    new_alerts.append(alert)
+            for rep in removed:
+                summary = (f"{rep['device']} removed after {rep['duration_sec']}s | "
+                           f"{rep['file_count']} file(s), {rep['mb']} MB copied to it")
+                if rep["file_count"] > 0:
+                    # Files were written to the USB while it was connected -> possible leak
+                    self.db.add_event("USB_DATA_LEAK", "removable media", 0, "HIGH", summary)
+                    names = [os.path.basename(f["path"]) for f in rep["files"]]
+                    alert = self._raise(
+                        "USB_DATA_LEAK", rep["device"], 0, 50,
+                        config.USB_LEAK_ALERT_LEVEL,
+                        [f"{rep['file_count']} file(s) ({rep['mb']} MB) copied to USB "
+                         f"in {rep['duration_sec']}s"] + names[:5]
+                        + (["..."] if len(names) > 5 else []),
+                        rep, [config.MITRE["USB_DATA_LEAK"]])
+                    if alert:
+                        new_alerts.append(alert)
+                else:
+                    self.db.add_event("USB_REMOVED", "removable media", 0, "LOW", summary)
+
+        # ---- Duplicate / mass file creation (virus staging) ----
+        if self.file_monitor.is_duplication():
+            n = self.file_monitor.recent_created_count()
+            alert = self._raise("DUPLICATE_FILES", "file system", 0, 30, "HIGH",
+                                [f"{n} new files created in "
+                                 f"{config.FILE_CREATE_WINDOW_SEC}s (possible duplication)"],
+                                mitre=[config.MITRE["DUPLICATE_FILES"]])
             if alert:
                 new_alerts.append(alert)
 
