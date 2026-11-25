@@ -172,6 +172,22 @@ class SentinelEngine:
                         new_alerts.append(alert)
                 else:
                     self.db.add_event("USB_REMOVED", "removable media", 0, "LOW", summary)
+            # Live: files copied to a USB WHILE it is still plugged in
+            for act in self.usb_monitor.live_activity():
+                names = [os.path.basename(f["path"]) for f in act["new_files"]]
+                detail = (f"{len(names)} file(s) copied to {act['mount']} "
+                          f"({round(act['bytes'] / 1048576, 2)} MB) | USB used "
+                          f"before {act['used_at_insert_mb']} MB, now {act['used_now_mb']} MB")
+                self.db.add_event("USB_DATA_COPY", "removable media", 0, "HIGH", detail)
+                alert = self._raise(
+                    "USB_DATA_COPY", act["device"], 0, 45, "HIGH",
+                    [f"copied to USB: {', '.join(names[:5])}"
+                     + ("..." if len(names) > 5 else ""),
+                     f"USB used before {act['used_at_insert_mb']} MB -> "
+                     f"now {act['used_now_mb']} MB ({round(act['bytes'] / 1048576, 2)} MB added)"],
+                    act, [config.MITRE["USB_DATA_COPY"]])
+                if alert:
+                    new_alerts.append(alert)
 
         # ---- Duplicate / mass file creation (virus staging) ----
         if self.file_monitor.is_duplication():

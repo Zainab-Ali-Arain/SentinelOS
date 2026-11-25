@@ -94,6 +94,7 @@ class _Drive:
         self.inserted_at = time.time()
         self.total, self.used, self.free = _disk_size(mount)
         self.writes = {}                 # path -> {"size", "time"}
+        self.reported = set()            # paths already announced as "copied"
         self.lock = threading.Lock()
         self.observer = None
         if config.USB_WATCH_WRITES:
@@ -119,6 +120,18 @@ class _Drive:
                 self.observer.join(timeout=2)
             except Exception:
                 pass
+
+    def new_writes(self):
+        """Files copied onto the USB that haven't been announced yet."""
+        with self.lock:
+            fresh = [{"path": p, "size": w["size"]} for p, w in self.writes.items()
+                     if p not in self.reported]
+            self.reported.update(self.writes.keys())
+        return fresh
+
+    def used_now_mb(self):
+        _total, used, _free = _disk_size(self.mount)
+        return round(used / 1048576, 1)
 
     def leak_report(self):
         with self.lock:
@@ -177,6 +190,24 @@ class UsbMonitor:
                 removed.append(report)
 
         return inserted, removed
+
+    def live_activity(self):
+        """Files copied to any connected USB since the last check (live).
+
+        Each entry: device, mount, used_at_insert_mb, used_now_mb, new_files, bytes.
+        """
+        out = []
+        for dev, drive in self.drives.items():
+            fresh = drive.new_writes()
+            if fresh:
+                out.append({
+                    "device": dev, "mount": drive.mount,
+                    "used_at_insert_mb": round(drive.used / 1048576, 1),
+                    "used_now_mb": drive.used_now_mb(),
+                    "new_files": fresh,
+                    "bytes": sum(f["size"] for f in fresh),
+                })
+        return out
 
     def close(self):
         for drive in self.drives.values():

@@ -54,6 +54,7 @@ MITRE = {
     "DARK_WEB": "T1090.003 Multi-hop Proxy: Tor",
     "USB_INSERTED": "T1091 Replication Through Removable Media",
     "USB_DATA_LEAK": "T1052.001 Exfiltration over USB",
+    "USB_DATA_COPY": "T1052.001 Exfiltration over USB",
     "DUPLICATE_FILES": "T1486 Data Encrypted for Impact",
 }
 
