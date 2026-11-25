@@ -133,6 +133,18 @@ class _Drive:
         _total, used, _free = _disk_size(self.mount)
         return round(used / 1048576, 1)
 
+    def mem_change(self):
+        """Before/after storage picture of the USB (used + free + the change)."""
+        total, used, free = _disk_size(self.mount)
+        return {
+            "total_mb": round(self.total / 1048576, 1),
+            "used_before_mb": round(self.used / 1048576, 1),
+            "used_now_mb": round(used / 1048576, 1),
+            "free_before_mb": round(self.free / 1048576, 1),
+            "free_now_mb": round(free / 1048576, 1),
+            "used_change_mb": round((used - self.used) / 1048576, 2),
+        }
+
     def leak_report(self):
         with self.lock:
             files = [{"path": p, "size": w["size"]} for p, w in self.writes.items()]
@@ -202,10 +214,9 @@ class UsbMonitor:
             if fresh:
                 out.append({
                     "device": dev, "mount": drive.mount,
-                    "used_at_insert_mb": round(drive.used / 1048576, 1),
-                    "used_now_mb": drive.used_now_mb(),
                     "new_files": fresh,
                     "bytes": sum(f["size"] for f in fresh),
+                    **drive.mem_change(),
                 })
         return out
 
