@@ -51,7 +51,19 @@ if __name__ == "__main__":
     name = arg_value("--name")
     if name:
         os.environ["SENTINEL_NAME"] = name  # must be set before sentinelos is imported
-    if "--cli" in sys.argv:
+    if "--lock" in sys.argv or "--unlock" in sys.argv:
+        from sentinelos import recovery
+        if "--lock" in sys.argv:
+            n, failed = recovery.lock_all()
+            print(f"Locked {n} protected file(s) (modify/delete blocked). {len(failed)} failed.")
+        else:
+            n, failed = recovery.unlock_all()
+            print(f"Unlocked {n} protected file(s). {len(failed)} failed.")
+        if failed:
+            print("Note: run as Administrator (Windows) or root (Linux) to lock system files.")
+            for path, msg in failed[:5]:
+                print(f"  - {path}: {msg}")
+    elif "--cli" in sys.argv:
         run_cli()
     elif "--agent" in sys.argv:
         from sentinelos.remote import run_agent

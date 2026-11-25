@@ -32,6 +32,11 @@ class SentinelEngine:
     def start(self):
         self.file_monitor.start()
         self.db.add_event("EDR_START", details=f"Watching {config.WATCH_DIR}")
+        if config.LOCKDOWN_PROTECTED:
+            from . import recovery
+            locked, failed = recovery.lock_all()
+            self.db.add_event("LOCKDOWN_ON",
+                              details=f"{locked} file(s) locked, {len(failed)} could not be locked")
 
     def stop(self):
         self.file_monitor.stop()
@@ -79,6 +84,17 @@ class SentinelEngine:
                                     [config.MITRE["FILE_INTEGRITY"]])
                 if alert:
                     new_alerts.append(alert)
+                if config.AUTO_RECOVERY:
+                    fixed = [p for p, _ in sys_changes if self.file_monitor.recover_protected(p)]
+                    if fixed:
+                        self.db.add_event("FILE_RECOVERED", f"{len(fixed)} system file(s)", 0,
+                                          "HIGH", ", ".join(os.path.basename(p) for p in fixed))
+                        ra = self._raise("FILE_RECOVERED", f"{len(fixed)} system file(s)", 0, 40,
+                                         "HIGH",
+                                         [f"restored {os.path.basename(p)}" for p in fixed[:5]],
+                                         {"files": fixed})
+                        if ra:
+                            new_alerts.append(ra)
 
         changes = self.file_monitor.check_integrity()
         if changes:
@@ -90,6 +106,17 @@ class SentinelEngine:
                                 [config.MITRE["FILE_INTEGRITY"]])
             if alert:
                 new_alerts.append(alert)
+            if config.AUTO_RECOVERY:
+                fixed = [p for p, _ in changes if self.file_monitor.recover(p)]
+                if fixed:
+                    self.db.add_event("FILE_RECOVERED", f"{len(fixed)} protected file(s)", 0,
+                                      "HIGH", ", ".join(os.path.basename(p) for p in fixed))
+                    ra = self._raise("FILE_RECOVERED", f"{len(fixed)} protected file(s)", 0, 40,
+                                     "HIGH",
+                                     [f"restored {os.path.basename(p)}" for p in fixed[:5]],
+                                     {"files": fixed})
+                    if ra:
+                        new_alerts.append(ra)
 
         # ---- Dark web / Tor usage ----
         tor_conns = [c for c in connections if c.get("tor")]

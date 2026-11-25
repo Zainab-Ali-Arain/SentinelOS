@@ -135,6 +135,19 @@ def _protected_targets():
 
 PROTECTED_FILES, PROTECTED_DIRS = _protected_targets()
 
+# ---- Self-healing recovery ----
+# When a protected file is modified/deleted, restore it from a known-good
+# backup taken when the baseline was built.
+AUTO_RECOVERY = True
+BACKUP_DIR = os.path.join(DATA_DIR, "backup")
+
+# ---- Lockdown (OS-level write/delete protection) ----
+# When True, the agent locks protected files on startup so they cannot be
+# modified or deleted (needs admin/root). Also available via the command line:
+#   python main.py --lock     (turn protection on)
+#   python main.py --unlock   (turn it off again)
+LOCKDOWN_PROTECTED = False
+
 # ---- Duplicate / mass file-creation (ransomware-style staging) ----
 # Separate from the generic "burst": this looks specifically at NEW files being
 # created fast (a virus copying/duplicating itself or encrypting into copies).

@@ -9,6 +9,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from . import config
+from . import recovery
 
 
 def sha256_of(path):
@@ -46,6 +47,7 @@ class FileMonitor:
         self.baseline = {}                 # path -> sha256 (integrity baseline)
         self.protected = {}                # real system files -> {mtime,size,sha}
         self.observer = None
+        self.backup = recovery.Backup() if config.AUTO_RECOVERY else None
 
     def start(self):
         self.build_baseline()
@@ -107,6 +109,8 @@ class FileMonitor:
                 digest = sha256_of(path)
                 if digest:
                     self.baseline[path] = digest
+                    if self.backup:
+                        self.backup.save(path)  # keep a known-good copy for recovery
 
     def check_integrity(self):
         """Compare protected files with the baseline.
@@ -151,6 +155,8 @@ class FileMonitor:
             meta = self._file_meta(path)
             if meta:
                 self.protected[path] = meta
+                if self.backup:
+                    self.backup.save(path)  # known-good copy for recovery
 
     def check_protected(self):
         """Re-check protected files. Returns [(path, MODIFIED|DELETED)].
@@ -177,3 +183,22 @@ class FileMonitor:
 
     def protected_count(self):
         return len(self.protected)
+
+    # ---- Self-healing recovery ----
+    def recover(self, path):
+        """Restore a tampered/deleted watch-dir file and reset its baseline."""
+        if not self.backup or not self.backup.restore(path):
+            return False
+        sha = sha256_of(path)
+        if sha:
+            self.baseline[path] = sha      # restored file is good again
+        return True
+
+    def recover_protected(self, path):
+        """Restore a tampered/deleted protected file and reset its baseline."""
+        if not self.backup or not self.backup.restore(path):
+            return False
+        meta = self._file_meta(path)
+        if meta:
+            self.protected[path] = meta
+        return True
