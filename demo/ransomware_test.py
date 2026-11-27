@@ -12,12 +12,17 @@ If auto-recovery is on, the protected originals are also restored.
 """
 import os
 import time
+import shutil
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 folder = os.path.join(BASE, "test_zone", "ransom")
+# Start clean so the test works every time (old .locked files would block renames)
+shutil.rmtree(folder, ignore_errors=True)
 os.makedirs(folder, exist_ok=True)
 
 print(f"Ransomware simulation running, PID {os.getpid()}...")
+print("NOTE: the dashboard (python main.py) must already be running BEFORE this.")
+time.sleep(1)
 paths = []
 for i in range(40):  # 1) burst of new files (mass/duplicate creation)
     p = os.path.join(folder, f"document_{i}.txt")
