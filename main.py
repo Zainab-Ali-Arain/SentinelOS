@@ -51,7 +51,29 @@ if __name__ == "__main__":
     name = arg_value("--name")
     if name:
         os.environ["SENTINEL_NAME"] = name  # must be set before sentinelos is imported
-    if "--lock" in sys.argv or "--unlock" in sys.argv:
+    if "--list-versions" in sys.argv or "--restore" in sys.argv:
+        from sentinelos import recovery
+        b = recovery.Backup()
+        args = [a for a in sys.argv[1:] if not a.startswith("--")]
+        if not args:
+            print("Usage: python main.py --list-versions <file>")
+            print("       python main.py --restore <file> [version-number]")
+        elif "--list-versions" in sys.argv:
+            vers = b.list_versions(args[0])
+            if not vers:
+                print(f"No versions stored for {args[0]}")
+            else:
+                print(f"Versions of {args[0]}:")
+                for v in vers:
+                    import time as _t
+                    print(f"  v{v['n']}  {_t.strftime('%Y-%m-%d %H:%M:%S', _t.localtime(v['time']))}"
+                          f"  sha {v['sha']}")
+        else:  # --restore
+            version = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
+            ok = b.restore(args[0], version)
+            print(f"Restored {args[0]}" + (f" to version {version}" if version else " (latest)")
+                  if ok else f"Could not restore {args[0]} (no backup?)")
+    elif "--lock" in sys.argv or "--unlock" in sys.argv:
         from sentinelos import recovery
         if "--lock" in sys.argv:
             n, failed = recovery.lock_all()

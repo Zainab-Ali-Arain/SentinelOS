@@ -56,6 +56,8 @@ MITRE = {
     "USB_DATA_LEAK": "T1052.001 Exfiltration over USB",
     "USB_DATA_COPY": "T1052.001 Exfiltration over USB",
     "DUPLICATE_FILES": "T1486 Data Encrypted for Impact",
+    "FILE_MOVED": "T1565.001 Stored Data Manipulation",
+    "FILE_EXT_CHANGED": "T1486 Data Encrypted for Impact",
 }
 
 # Office/document apps should never start a shell. If they do, it is a
@@ -141,6 +143,10 @@ PROTECTED_FILES, PROTECTED_DIRS = _protected_targets()
 # backup taken when the baseline was built.
 AUTO_RECOVERY = True
 BACKUP_DIR = os.path.join(DATA_DIR, "backup")
+# Keep a short version history of each protected file so any previous version
+# can be restored, not just the latest known-good copy.
+FILE_VERSIONING = True
+MAX_VERSIONS = 10
 
 # ---- Lockdown (OS-level write/delete protection) ----
 # When True, the agent locks protected files on startup so they cannot be

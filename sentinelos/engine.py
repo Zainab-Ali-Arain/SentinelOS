@@ -117,6 +117,12 @@ class SentinelEngine:
                                      {"files": fixed})
                     if ra:
                         new_alerts.append(ra)
+            elif config.FILE_VERSIONING and self.file_monitor.backup:
+                # not auto-reverting: keep a version of the new content so the
+                # user can roll back to any previous version from the dashboard
+                for p, s in changes:
+                    if s == "MODIFIED":
+                        self.file_monitor.backup.save(p)
 
         # ---- Dark web / Tor usage ----
         tor_conns = [c for c in connections if c.get("tor")]
@@ -201,8 +207,33 @@ class SentinelEngine:
             if alert:
                 new_alerts.append(alert)
 
+        moved, ext_changed = [], []
         for ev in self.file_monitor.take_new_events():
-            self.db.add_event("FILE_" + ev["type"], details=ev["path"])
+            detail = ev["path"] + (f" -> {ev['dest']}" if ev.get("dest") else "")
+            self.db.add_event("FILE_" + ev["type"], details=detail)
+            if ev["type"] == "MOVED" and ev.get("dest"):
+                moved.append(ev)
+                old_ext = os.path.splitext(ev["path"])[1].lower()
+                new_ext = os.path.splitext(ev["dest"])[1].lower()
+                if old_ext != new_ext:
+                    ext_changed.append(ev)
+        if moved:
+            labels = [f"{os.path.basename(m['path'])} -> {os.path.basename(m['dest'])}"
+                      for m in moved]
+            a = self._raise("FILE_MOVED", f"{len(moved)} file(s)", 0, 20, "MEDIUM",
+                            labels[:5] + (["..."] if len(labels) > 5 else []),
+                            {"moves": labels}, [config.MITRE["FILE_MOVED"]])
+            if a:
+                new_alerts.append(a)
+        if ext_changed:
+            labels = [f"{os.path.basename(m['path'])} -> {os.path.basename(m['dest'])}"
+                      for m in ext_changed]
+            a = self._raise("FILE_EXT_CHANGED", f"{len(ext_changed)} file(s)", 0, 55, "HIGH",
+                            ["extension changed (ransomware indicator): "
+                             + ", ".join(labels[:5])],
+                            {"files": labels}, [config.MITRE["FILE_EXT_CHANGED"]])
+            if a:
+                new_alerts.append(a)
 
         # Process timeline (start / stop events)
         for p in self.process_monitor.started:

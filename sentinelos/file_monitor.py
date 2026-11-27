@@ -47,7 +47,8 @@ class FileMonitor:
         self.baseline = {}                 # path -> sha256 (integrity baseline)
         self.protected = {}                # real system files -> {mtime,size,sha}
         self.observer = None
-        self.backup = recovery.Backup() if config.AUTO_RECOVERY else None
+        self.backup = (recovery.Backup()
+                       if (config.AUTO_RECOVERY or config.FILE_VERSIONING) else None)
 
     def start(self):
         self.build_baseline()
