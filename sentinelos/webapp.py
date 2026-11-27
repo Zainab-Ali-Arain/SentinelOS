@@ -170,7 +170,7 @@ def create_app(engine=None, users=None):
             "suspicious": db.count_alerts(("DUPLICATE_FILES", "FILE_MOVED"), ep),
             "malware": db.count_alerts(("RANSOMWARE_BEHAVIOR", "FILE_EXT_CHANGED"), ep),
             "usb": db.count_events("USB_INSERTED", ep),
-            "blocked": db.count_alerts(("USB_BLOCKED_COPY",), ep),
+            "blocked": db.count_alerts(("USB_BLOCKED_COPY", "COPY_BLOCKED"), ep),
         }
         return jsonify(counts=counts, alerts=db.security_alerts(300, ep))
 

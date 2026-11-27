@@ -17,7 +17,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(ROOT, "dist")
 AGENT_MODULES = ["__init__", "config", "system_info", "process_monitor", "file_monitor",
                  "network_monitor", "detection", "engine", "database", "lists", "remote",
-                 "app_names", "usb_monitor", "recovery"]
+                 "app_names", "usb_monitor", "recovery", "copyguard"]
 README = """SentinelOS Agent
 ================
 This program only MONITORS this laptop (processes, files in test_zone,

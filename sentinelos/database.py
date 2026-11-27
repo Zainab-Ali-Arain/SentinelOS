@@ -135,7 +135,7 @@ class Database:
 
     SECURITY_ALERT_TYPES = ("FILE_INTEGRITY", "FILE_RECOVERED", "FILE_MOVED",
                             "FILE_EXT_CHANGED", "DUPLICATE_FILES", "RANSOMWARE_BEHAVIOR",
-                            "USB_BLOCKED_COPY")
+                            "USB_BLOCKED_COPY", "COPY_BLOCKED")
 
     def count_alerts(self, types, endpoint=None):
         qs = ",".join("?" * len(types))

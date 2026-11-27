@@ -15,6 +15,7 @@ from .network_monitor import get_connections
 from .process_monitor import ProcessMonitor
 from .system_info import get_system_info
 from .usb_monitor import UsbMonitor
+from .copyguard import CopyGuard
 
 LEVEL_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -27,11 +28,14 @@ class SentinelEngine:
         self.iocs = IocList()
         self.trusted = TrustedList()
         self.usb_monitor = UsbMonitor()
+        self.copy_guard = CopyGuard() if config.COPY_GUARD else None
         self.last_alert = {}   # (type, pid, level) -> time, to avoid alert spam
         self.state = {}        # latest scan results, read by the dashboard
 
     def start(self):
         self.file_monitor.start()
+        if self.copy_guard:
+            self.copy_guard.start()
         self.db.add_event("EDR_START", details=f"Watching {config.WATCH_DIR}")
         if config.LOCKDOWN_PROTECTED:
             locked, failed = recovery.lock_all()
@@ -44,6 +48,8 @@ class SentinelEngine:
     def stop(self):
         self.file_monitor.stop()
         self.usb_monitor.close()
+        if self.copy_guard:
+            self.copy_guard.stop()
         if config.USB_STRICT_WRITE_PROTECT:
             recovery.set_usb_write_protect(False)  # lift strict mode on shutdown
         self.db.add_event("EDR_STOP")
@@ -209,6 +215,35 @@ class SentinelEngine:
                             "USB_FILE_COPY", "removable media", 0, "INFO",
                             f"{name} -> {act['mount']} | USB used "
                             f"{act['used_before_mb']}->{act['used_now_mb']} MB")
+
+        # ---- Copy-Guard: protected file copied to a watched LOCAL folder ----
+        if self.copy_guard:
+            guard_hashes = self.file_monitor.protected_hashes()
+            for path in self.copy_guard.new_writes():
+                try:
+                    sha = recovery._sha(path)
+                except OSError:
+                    continue
+                if sha in guard_hashes:
+                    name = os.path.basename(path)
+                    removed = False
+                    try:
+                        os.remove(path)
+                        removed = True
+                    except OSError:
+                        removed = False
+                    self.db.add_event("COPY_BLOCKED", "copy-guard", 0, "CRITICAL",
+                                      f"protected file '{name}' copied to {os.path.dirname(path)} "
+                                      f"({'removed' if removed else 'DETECTED'})")
+                    a = self._raise("COPY_BLOCKED", path, 0, 70, "CRITICAL",
+                                    [f"protected file copied: {name}",
+                                     "copy blocked and removed" if removed
+                                     else "detected (could not remove)",
+                                     f"location: {os.path.dirname(path)}"],
+                                    {"file": name, "path": path},
+                                    [config.MITRE["COPY_BLOCKED"]])
+                    if a:
+                        new_alerts.append(a)
 
         # ---- Duplicate / mass file creation (virus staging) ----
         if self.file_monitor.is_duplication():

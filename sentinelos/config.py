@@ -56,6 +56,7 @@ MITRE = {
     "USB_DATA_LEAK": "T1052.001 Exfiltration over USB",
     "USB_DATA_COPY": "T1052.001 Exfiltration over USB",
     "USB_BLOCKED_COPY": "T1052.001 Exfiltration over USB",
+    "COPY_BLOCKED": "T1005 Data from Local System",
     "DUPLICATE_FILES": "T1486 Data Encrypted for Impact",
     "FILE_MOVED": "T1565.001 Stored Data Manipulation",
     "FILE_EXT_CHANGED": "T1486 Data Encrypted for Impact",
@@ -110,6 +111,19 @@ USB_LEAK_ALERT_LEVEL = "HIGH" # level for a removal where files were copied out
 USB_SILENT_INSERT = True          # inserting a USB only logs - no security alert
 USB_BLOCK_PROTECTED_COPY = True   # a protected file copied to USB is deleted from it + alert
 USB_STRICT_WRITE_PROTECT = False  # strict mode: block ALL writes to any USB (Windows, admin)
+
+# Also stop protected files being copied to common LOCAL folders (not just USB).
+# A protected file that appears in one of these folders is removed + alerted.
+COPY_GUARD = True
+
+
+def _copy_guard_dirs():
+    home = os.path.expanduser("~")
+    cands = [os.path.join(home, d) for d in ("Desktop", "Documents", "Downloads")]
+    return [d for d in cands if os.path.isdir(d)]
+
+
+COPY_GUARD_DIRS = _copy_guard_dirs()
 
 # ---- Real system-protected files (File Integrity Monitoring) ----
 # These are OS files a normal program should never change. We only READ and
