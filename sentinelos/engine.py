@@ -36,6 +36,11 @@ class SentinelEngine:
         self.file_monitor.start()
         if self.copy_guard:
             self.copy_guard.start()
+        if config.PROTECT_BACKUPS and self.file_monitor.backup:
+            n = self.file_monitor.backup.protect_existing()
+            if n:
+                self.db.add_event("BACKUP_PROTECTED", severity="INFO",
+                                  details=f"{n} backup file(s) locked (write/delete-proof)")
         self.db.add_event("EDR_START", details=f"Watching {config.WATCH_DIR}")
         if config.LOCKDOWN_PROTECTED:
             locked, failed = recovery.lock_all()

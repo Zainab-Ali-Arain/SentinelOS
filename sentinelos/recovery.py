@@ -89,20 +89,39 @@ class Backup:
         if versions and versions[-1].get("sha") == sha:
             return True  # unchanged - no new version (prevents loops/duplicates)
         vfile = f"{key}__v{len(versions) + 1}_{int(time.time())}"
+        dest = os.path.join(self.dir, vfile)
         try:
-            shutil.copy2(path, os.path.join(self.dir, vfile))
+            shutil.copy2(path, dest)
         except OSError:
             return False
+        if getattr(config, "PROTECT_BACKUPS", False):
+            lock_path(dest)  # make this backup copy write/delete-proof
         versions.append({"file": vfile, "sha": sha, "time": time.time()})
         max_v = getattr(config, "MAX_VERSIONS", 10)
         while len(versions) > max_v:  # keep only the most recent N versions
             old = versions.pop(0)
+            oldfile = os.path.join(self.dir, old["file"])
+            if getattr(config, "PROTECT_BACKUPS", False):
+                unlock_path(oldfile)  # must unlock before we can remove it
             try:
-                os.remove(os.path.join(self.dir, old["file"]))
+                os.remove(oldfile)
             except OSError:
                 pass
         self._flush()
         return True
+
+    def protect_existing(self):
+        """Lock every stored backup version (called at startup). Returns count."""
+        if not getattr(config, "PROTECT_BACKUPS", False):
+            return 0
+        n = 0
+        for entry in self.index.values():
+            for v in entry.get("versions", []):
+                f = os.path.join(self.dir, v["file"])
+                if os.path.exists(f):
+                    ok, _ = lock_path(f)
+                    n += 1 if ok else 0
+        return n
 
     def restore(self, path, version=None):
         """Restore the latest version (default) or a specific 1-based version."""

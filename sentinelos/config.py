@@ -166,6 +166,10 @@ BACKUP_DIR = os.path.join(DATA_DIR, "backup")
 # can be restored, not just the latest known-good copy.
 FILE_VERSIONING = True
 MAX_VERSIONS = 10
+# Lock each backup copy at the OS level so stored backups cannot be modified or
+# deleted by other users/programs (protects recovery data). Needs admin/root to
+# be fully effective; falls back to read-only permissions otherwise.
+PROTECT_BACKUPS = True
 
 # ---- Lockdown (OS-level write/delete protection) ----
 # When True, the agent locks protected files on startup so they cannot be
