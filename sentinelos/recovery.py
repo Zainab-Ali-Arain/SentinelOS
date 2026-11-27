@@ -195,6 +195,25 @@ def unlock_path(path):
         return False, str(exc)
 
 
+def set_usb_write_protect(enable):
+    """Strict mode: block ALL writes to removable drives (Windows, needs admin).
+
+    Sets the StorageDevicePolicies\\WriteProtect registry value. Reversible.
+    Returns (ok, message). No-op with a message on non-Windows.
+    """
+    if os.name != "nt":
+        return False, "USB write-protect is only available on Windows"
+    key = r"HKLM\SYSTEM\CurrentControlSet\Control\StorageDevicePolicies"
+    try:
+        r = subprocess.run(["reg", "add", key, "/v", "WriteProtect", "/t", "REG_DWORD",
+                            "/d", "1" if enable else "0", "/f"],
+                           capture_output=True, text=True)
+        ok = r.returncode == 0
+        return ok, ("write-protect " + ("ON" if enable else "OFF")) if ok else r.stderr.strip()
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
 def protected_targets():
     """Every file the project protects: the watch folder + configured files."""
     targets = []

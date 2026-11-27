@@ -6,6 +6,7 @@ import os
 import hmac
 import json
 import time
+import hashlib
 import secrets
 import tempfile
 import threading
@@ -151,6 +152,28 @@ def create_app(engine=None, users=None):
     def alerts():
         return render_template("alerts.html", page="alerts")
 
+    @app.route("/security")
+    @login_required
+    def security():
+        return render_template("security.html", page="security")
+
+    @app.route("/api/security")
+    @login_required
+    def api_security():
+        ep = scope()
+        db = engine.db
+        counts = {
+            "protected": len(engine.file_monitor.baseline) + engine.file_monitor.protected_count(),
+            "deleted": db.count_events("FILE_DELETED", ep),
+            "recovered": db.count_alerts(("FILE_RECOVERED",), ep),
+            "modified": db.count_alerts(("FILE_INTEGRITY",), ep) + db.count_events("FILE_MODIFIED", ep),
+            "suspicious": db.count_alerts(("DUPLICATE_FILES", "FILE_MOVED"), ep),
+            "malware": db.count_alerts(("RANSOMWARE_BEHAVIOR", "FILE_EXT_CHANGED"), ep),
+            "usb": db.count_events("USB_INSERTED", ep),
+            "blocked": db.count_alerts(("USB_BLOCKED_COPY",), ep),
+        }
+        return jsonify(counts=counts, alerts=db.security_alerts(300, ep))
+
     @app.route("/activity")
     @login_required
     def activity():
@@ -278,8 +301,19 @@ def create_app(engine=None, users=None):
         token = request.headers.get("X-Sentinel-Token", "")
         if not hmac.compare_digest(token, config.AGENT_TOKEN):
             return jsonify(error="bad token"), 403
+        raw = request.get_data()
+        if config.COMMS_SIGNING:
+            # Verify the report is authentic and fresh (anti-tamper + anti-replay)
+            ts = request.headers.get("X-Sentinel-Timestamp", "")
+            sig = request.headers.get("X-Sentinel-Sign", "")
+            if not ts.isdigit() or abs(time.time() - int(ts)) > config.COMMS_MAX_SKEW_SEC:
+                return jsonify(error="stale or missing timestamp"), 403
+            expect = hmac.new(config.AGENT_TOKEN.encode(), ts.encode() + raw,
+                              hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(sig, expect):
+                return jsonify(error="bad signature"), 403
         try:
-            report = request.get_json(force=True)
+            report = json.loads(raw.decode() or "{}")
             if report["hostname"] == HOSTNAME:
                 return jsonify(error="agent has the same name as the server"), 400
             hub.update(report, request.remote_addr)

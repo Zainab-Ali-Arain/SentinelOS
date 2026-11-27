@@ -7,8 +7,11 @@ endpoint (including the server laptop itself) plus a short history for graphs.
 
 Only use this on computers whose owner has agreed to be monitored.
 """
+import os
 import json
 import time
+import hmac
+import hashlib
 import threading
 import urllib.request
 from collections import deque
@@ -16,6 +19,28 @@ from collections import deque
 from . import config
 
 HISTORY_POINTS = 120  # points kept per endpoint for the graphs
+
+
+def sign_request(body, timestamp):
+    """HMAC-SHA256 over timestamp+body, keyed by the shared token."""
+    return hmac.new(config.AGENT_TOKEN.encode(),
+                    timestamp.encode() + body, hashlib.sha256).hexdigest()
+
+
+def _load_queue():
+    try:
+        with open(config.AGENT_QUEUE_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return []
+
+
+def _save_queue(pending):
+    try:
+        with open(config.AGENT_QUEUE_PATH, "w") as f:
+            json.dump(pending[-500:], f)  # cap so the queue file can't grow forever
+    except OSError:
+        pass
 
 
 def build_report(state, alerts):
@@ -92,25 +117,35 @@ def run_agent(server_ip):
     url = f"http://{server_ip}:{config.WEB_PORT}/api/report"
     engine = SentinelEngine()
     engine.start()
-    pending = []  # alerts not delivered yet (server unreachable)
+    pending = _load_queue()  # alerts not delivered yet (survive restart/crash)
+    if pending:
+        print(f"Loaded {len(pending)} queued alert(s) from a previous run.")
     print(f"SentinelOS agent running on {HOSTNAME}")
     print(f"Reporting to {url} every {config.AGENT_INTERVAL_SEC}s. Press Ctrl+C to stop.\n")
     try:
         while True:
+            # Local protection (detection, backup, recovery) always runs, even
+            # if the dashboard is unreachable - only delivery is queued.
             state = engine.scan()
             pending.extend(state["new_alerts"])
+            _save_queue(pending)
             body = json.dumps(build_report(state, pending)).encode()
-            req = urllib.request.Request(url, data=body, method="POST", headers={
-                "Content-Type": "application/json", "X-Sentinel-Token": config.AGENT_TOKEN})
+            ts = str(int(time.time()))
+            headers = {"Content-Type": "application/json",
+                       "X-Sentinel-Token": config.AGENT_TOKEN,
+                       "X-Sentinel-Timestamp": ts,
+                       "X-Sentinel-Sign": sign_request(body, ts)}
+            req = urllib.request.Request(url, data=body, method="POST", headers=headers)
             try:
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     resp.read()
                 print(f"[{time.strftime('%H:%M:%S')}] sent | threat {state['threat_level']}"
-                      f" | {len(pending)} new alert(s)")
+                      f" | {len(pending)} alert(s) synced")
                 pending = []
+                _save_queue(pending)  # delivered - clear the queue on disk
             except OSError as exc:
                 print(f"[{time.strftime('%H:%M:%S')}] server not reachable ({exc}); "
-                      f"keeping {len(pending)} alert(s) for later")
+                      f"queued {len(pending)} alert(s) for later")
             time.sleep(config.AGENT_INTERVAL_SEC)
     except KeyboardInterrupt:
         engine.stop()

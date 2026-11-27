@@ -55,6 +55,7 @@ MITRE = {
     "USB_INSERTED": "T1091 Replication Through Removable Media",
     "USB_DATA_LEAK": "T1052.001 Exfiltration over USB",
     "USB_DATA_COPY": "T1052.001 Exfiltration over USB",
+    "USB_BLOCKED_COPY": "T1052.001 Exfiltration over USB",
     "DUPLICATE_FILES": "T1486 Data Encrypted for Impact",
     "FILE_MOVED": "T1565.001 Stored Data Manipulation",
     "FILE_EXT_CHANGED": "T1486 Data Encrypted for Impact",
@@ -105,6 +106,10 @@ DARK_WEB_SCORE = 40   # points added when Tor use is detected
 USB_MONITOR = True            # watch for USB drives being plugged in
 USB_WATCH_WRITES = True       # also watch what is copied TO the USB (data-leak check)
 USB_LEAK_ALERT_LEVEL = "HIGH" # level for a removal where files were copied out
+# Spec-aligned USB behaviour:
+USB_SILENT_INSERT = True          # inserting a USB only logs - no security alert
+USB_BLOCK_PROTECTED_COPY = True   # a protected file copied to USB is deleted from it + alert
+USB_STRICT_WRITE_PROTECT = False  # strict mode: block ALL writes to any USB (Windows, admin)
 
 # ---- Real system-protected files (File Integrity Monitoring) ----
 # These are OS files a normal program should never change. We only READ and
@@ -154,6 +159,13 @@ MAX_VERSIONS = 10
 #   python main.py --lock     (turn protection on)
 #   python main.py --unlock   (turn it off again)
 LOCKDOWN_PROTECTED = False
+
+# ---- Agent <-> server communication ----
+# Sign every report with HMAC(token, timestamp+body) so the server can verify
+# it is authentic and not a replay. (Transport encryption = run behind HTTPS.)
+COMMS_SIGNING = True
+COMMS_MAX_SKEW_SEC = 300          # reject reports whose timestamp is older than this
+AGENT_QUEUE_PATH = os.path.join(DATA_DIR, "agent_queue.json")  # offline event queue
 
 # ---- Duplicate / mass file-creation (ransomware-style staging) ----
 # Separate from the generic "burst": this looks specifically at NEW files being

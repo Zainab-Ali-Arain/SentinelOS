@@ -185,6 +185,15 @@ class FileMonitor:
     def protected_count(self):
         return len(self.protected)
 
+    def protected_hashes(self):
+        """SHA-256 of every protected file (watch-dir + system files).
+
+        Used to recognise a protected file being copied onto a USB drive.
+        """
+        hashes = {h for h in self.baseline.values() if h}
+        hashes |= {m["sha"] for m in self.protected.values() if m.get("sha")}
+        return hashes
+
     # ---- Self-healing recovery ----
     def recover(self, path):
         """Restore a tampered/deleted watch-dir file and reset its baseline."""

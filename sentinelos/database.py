@@ -133,6 +133,38 @@ class Database:
         return {r["k"]: r["n"] for r in self._read(
             f"SELECT {column} AS k, COUNT(*) AS n FROM events {where} GROUP BY {column}", params)}
 
+    SECURITY_ALERT_TYPES = ("FILE_INTEGRITY", "FILE_RECOVERED", "FILE_MOVED",
+                            "FILE_EXT_CHANGED", "DUPLICATE_FILES", "RANSOMWARE_BEHAVIOR",
+                            "USB_BLOCKED_COPY")
+
+    def count_alerts(self, types, endpoint=None):
+        qs = ",".join("?" * len(types))
+        sql = f"SELECT COUNT(*) n FROM alerts WHERE alert_type IN ({qs})"
+        params = list(types)
+        if endpoint is not None:
+            sql += " AND endpoint = ?"
+            params.append(endpoint)
+        return self._read(sql, params)[0]["n"]
+
+    def count_events(self, like, endpoint=None):
+        sql = "SELECT COUNT(*) n FROM events WHERE event_type LIKE ?"
+        params = [like]
+        if endpoint is not None:
+            sql += " AND endpoint = ?"
+            params.append(endpoint)
+        return self._read(sql, params)[0]["n"]
+
+    def security_alerts(self, limit=300, endpoint=None):
+        """Recent alerts that belong to the file/USB security features."""
+        types = self.SECURITY_ALERT_TYPES
+        qs = ",".join("?" * len(types))
+        sql = f"SELECT * FROM alerts WHERE alert_type IN ({qs})"
+        params = list(types)
+        if endpoint is not None:
+            sql += " AND endpoint = ?"
+            params.append(endpoint)
+        return self._read(sql + " ORDER BY id DESC LIMIT ?", (*params, limit))
+
     def get_alert(self, alert_id):
         rows = self._read("SELECT * FROM alerts WHERE id = ?", (alert_id,))
         return rows[0] if rows else None
