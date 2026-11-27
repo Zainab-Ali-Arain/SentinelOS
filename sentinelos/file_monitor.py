@@ -9,6 +9,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from . import config
+from . import recovery
 
 
 def sha256_of(path):
@@ -44,10 +45,15 @@ class FileMonitor:
         self.new_events = []               # events not yet saved to DB
         self.lock = threading.Lock()
         self.baseline = {}                 # path -> sha256 (integrity baseline)
+        self.protected = {}                # real system files -> {mtime,size,sha}
         self.observer = None
+        self.backup = (recovery.Backup()
+                       if (config.AUTO_RECOVERY or config.FILE_VERSIONING) else None)
 
     def start(self):
         self.build_baseline()
+        if config.PROTECT_SYSTEM_FILES:
+            self.build_protected_baseline()
         self.observer = Observer()
         self.observer.schedule(_Handler(self), self.watch_dir, recursive=True)
         self.observer.daemon = True
@@ -104,6 +110,8 @@ class FileMonitor:
                 digest = sha256_of(path)
                 if digest:
                     self.baseline[path] = digest
+                    if self.backup:
+                        self.backup.save(path)  # keep a known-good copy for recovery
 
     def check_integrity(self):
         """Compare protected files with the baseline.
@@ -122,3 +130,85 @@ class FileMonitor:
 
     def file_count(self):
         return sum(len(files) for _r, _d, files in os.walk(self.watch_dir))
+
+    # ---- Real system-protected files (read-only integrity monitoring) ----
+    @staticmethod
+    def _file_meta(path):
+        """(mtime, size, sha256) for a file, or None if it can't be read."""
+        try:
+            st = os.stat(path)
+        except OSError:
+            return None
+        sha = sha256_of(path)
+        if sha is None:
+            return None  # e.g. no permission (SAM/shadow) - skip, don't crash
+        return {"mtime": st.st_mtime, "size": st.st_size, "sha": sha}
+
+    def build_protected_baseline(self):
+        """Hash the OS's protected files once. We only read them, never change."""
+        self.protected = {}
+        targets = list(config.PROTECTED_FILES)
+        for d in config.PROTECTED_DIRS:
+            if os.path.isdir(d):
+                for root, _dirs, files in os.walk(d):
+                    targets.extend(os.path.join(root, n) for n in files)
+        for path in targets:
+            meta = self._file_meta(path)
+            if meta:
+                self.protected[path] = meta
+                if self.backup:
+                    self.backup.save(path)  # known-good copy for recovery
+
+    def check_protected(self):
+        """Re-check protected files. Returns [(path, MODIFIED|DELETED)].
+
+        Cheap: only re-hashes a file when its mtime or size changed, so big
+        system files are not hashed on every scan.
+        """
+        changes = []
+        for path, old in list(self.protected.items()):
+            try:
+                st = os.stat(path)
+            except OSError:
+                changes.append((path, "DELETED"))
+                del self.protected[path]
+                continue
+            if st.st_mtime == old["mtime"] and st.st_size == old["size"]:
+                continue  # unchanged - skip hashing
+            sha = sha256_of(path)
+            if sha and sha != old["sha"]:
+                changes.append((path, "MODIFIED"))
+            self.protected[path] = {"mtime": st.st_mtime, "size": st.st_size,
+                                    "sha": sha or old["sha"]}
+        return changes
+
+    def protected_count(self):
+        return len(self.protected)
+
+    def protected_hashes(self):
+        """SHA-256 of every protected file (watch-dir + system files).
+
+        Used to recognise a protected file being copied onto a USB drive.
+        """
+        hashes = {h for h in self.baseline.values() if h}
+        hashes |= {m["sha"] for m in self.protected.values() if m.get("sha")}
+        return hashes
+
+    # ---- Self-healing recovery ----
+    def recover(self, path):
+        """Restore a tampered/deleted watch-dir file and reset its baseline."""
+        if not self.backup or not self.backup.restore(path):
+            return False
+        sha = sha256_of(path)
+        if sha:
+            self.baseline[path] = sha      # restored file is good again
+        return True
+
+    def recover_protected(self, path):
+        """Restore a tampered/deleted protected file and reset its baseline."""
+        if not self.backup or not self.backup.restore(path):
+            return False
+        meta = self._file_meta(path)
+        if meta:
+            self.protected[path] = meta
+        return True

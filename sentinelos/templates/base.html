@@ -26,6 +26,7 @@
       <a href="/endpoints" class="{{ 'active' if page == 'endpoints' }}">{{ icon("laptop") }}Endpoints</a>
       <a href="/alerts" class="{{ 'active' if page == 'alerts' }}">{{ icon("alert") }}Alerts
         <span id="nav-alerts" class="badge b-HIGH"></span></a>
+      <a href="/security" class="{{ 'active' if page == 'security' }}">{{ icon("shield") }}Security</a>
       <a href="/activity" class="{{ 'active' if page == 'activity' }}">{{ icon("activity") }}Activity Log</a>
       {% if role == 'admin' %}<a href="/users" class="{{ 'active' if page == 'users' }}">{{ icon("users") }}Users</a>{% endif %}
       <a href="/warroom" class="wr">{{ icon("globe") }}War Room<span class="new">3D</span></a>

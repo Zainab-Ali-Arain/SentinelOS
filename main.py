@@ -51,7 +51,41 @@ if __name__ == "__main__":
     name = arg_value("--name")
     if name:
         os.environ["SENTINEL_NAME"] = name  # must be set before sentinelos is imported
-    if "--cli" in sys.argv:
+    if "--list-versions" in sys.argv or "--restore" in sys.argv:
+        from sentinelos import recovery
+        b = recovery.Backup()
+        args = [a for a in sys.argv[1:] if not a.startswith("--")]
+        if not args:
+            print("Usage: python main.py --list-versions <file>")
+            print("       python main.py --restore <file> [version-number]")
+        elif "--list-versions" in sys.argv:
+            vers = b.list_versions(args[0])
+            if not vers:
+                print(f"No versions stored for {args[0]}")
+            else:
+                print(f"Versions of {args[0]}:")
+                for v in vers:
+                    import time as _t
+                    print(f"  v{v['n']}  {_t.strftime('%Y-%m-%d %H:%M:%S', _t.localtime(v['time']))}"
+                          f"  sha {v['sha']}")
+        else:  # --restore
+            version = int(args[1]) if len(args) > 1 and args[1].isdigit() else None
+            ok = b.restore(args[0], version)
+            print(f"Restored {args[0]}" + (f" to version {version}" if version else " (latest)")
+                  if ok else f"Could not restore {args[0]} (no backup?)")
+    elif "--lock" in sys.argv or "--unlock" in sys.argv:
+        from sentinelos import recovery
+        if "--lock" in sys.argv:
+            n, failed = recovery.lock_all()
+            print(f"Locked {n} protected file(s) (modify/delete blocked). {len(failed)} failed.")
+        else:
+            n, failed = recovery.unlock_all()
+            print(f"Unlocked {n} protected file(s). {len(failed)} failed.")
+        if failed:
+            print("Note: run as Administrator (Windows) or root (Linux) to lock system files.")
+            for path, msg in failed[:5]:
+                print(f"  - {path}: {msg}")
+    elif "--cli" in sys.argv:
         run_cli()
     elif "--agent" in sys.argv:
         from sentinelos.remote import run_agent

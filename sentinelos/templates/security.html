@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Security{% endblock %}
+{% block content %}
+<div class="topbar">
+  <div><h1>Security</h1><div class="sub">File protection, recovery, ransomware behaviour and USB access control.</div></div>
+  <a class="btn ghost" href="/export/alerts.csv">{{ icon("download") }}Export CSV</a>
+</div>
+<div class="grid kpis" id="seckpis"></div>
+<div class="card reveal">
+  <div class="toolbar">
+    <div class="search">{{ icon("search") }}<input id="search" placeholder="Search security events..."></div>
+    <select id="f-sev"><option value="">All severities</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select>
+  </div>
+  <div class="table-wrap"><table><thead><tr>
+    <th>#</th><th>Time</th><th>Laptop</th><th>Type</th><th>File / Target</th><th>Severity</th><th>Action</th><th>Status</th>
+  </tr></thead><tbody id="rows"></tbody></table></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+let secAlerts = [];
+const KPI = [["protected", "Protected Files"], ["deleted", "Deleted"], ["recovered", "Recovered"],
+  ["modified", "Modified"], ["suspicious", "Suspicious"], ["malware", "Malware-like"],
+  ["usb", "USB Devices"], ["blocked", "Blocked Copies"]];
+["search", "f-sev"].forEach(id => document.getElementById(id).addEventListener("input", render));
+
+function actionOf(a) {
+  if (a.alert_type === "FILE_RECOVERED") return "Recovered";
+  if (a.alert_type === "USB_BLOCKED_COPY") return "Blocked";
+  if (a.status && a.status !== "NEW") return a.status.replace("_", " ");
+  return "Logged";
+}
+
+function render() {
+  const q = document.getElementById("search").value.toLowerCase();
+  const sev = document.getElementById("f-sev").value;
+  const rows = secAlerts.filter(a => (!sev || a.severity === sev) &&
+    (!q || JSON.stringify(a).toLowerCase().includes(q)));
+  fillRows(document.getElementById("rows"), rows.map(a => `
+    <tr class="row-${esc(a.severity)} click" onclick="view(${a.id})">
+      <td class="muted">${a.id}</td><td class="small nowrap" title="${esc(a.timestamp)}">${esc(a.timestamp.slice(5))}</td>
+      <td>${esc(a.endpoint)}</td><td>${esc(a.alert_type)}</td>
+      <td class="reasons trunc" title="${esc(a.reasons)}">${esc(a.reasons)}</td>
+      <td>${badge(a.severity)}</td><td>${esc(actionOf(a))}</td>
+      <td><span class="badge ${a.status === "NEW" ? "b-NEW" : "b-OK"}">${esc(a.status.replace("_", " "))}</span></td>
+    </tr>`).join("") || '<tr><td colspan="8" class="empty">No security events yet</td></tr>');
+}
+
+function view(id) {
+  const a = secAlerts.find(x => x.id === id);
+  let d = {};
+  try { d = JSON.parse(a.details || "{}"); } catch (e) {}
+  showModal(`Alert #${a.id} · ${a.alert_type}`, {
+    Time: a.timestamp, Laptop: a.endpoint, Type: a.alert_type, Severity: a.severity,
+    Reasons: a.reasons, "MITRE ATT&CK": a.mitre || "-", Status: a.status,
+    "Action taken": actionOf(a), ...d });
+}
+
+async function load() {
+  const d = await api("/api/security");
+  if (!d) return;
+  secAlerts = d.alerts;
+  const box = document.getElementById("seckpis");
+  if (!box.children.length) box.innerHTML = KPI.map(([k, l], i) =>
+    `<div class="card kpi reveal tilt" style="--i:${i}"><div class="label">${l}</div><div class="value" data-k="${k}">0</div></div>`).join("");
+  KPI.forEach(([k]) => countTo(box.querySelector(`[data-k="${k}"]`), d.counts[k] || 0));
+  render();
+}
+poll(load, 4000);
+</script>
+{% endblock %}
